@@ -1,4 +1,69 @@
 {
-  "trucks": [], 
-  "records": []
+  "trucks": [
+    {
+      "id": "truck_001",
+      "plateNumber": "GBH 218Z",
+      "budget": 650,
+      "color": "#c2413a"
+    },
+    {
+      "id": "truck_002",
+      "plateNumber": "YR 1868R",
+      "budget": 650,
+      "color": "#3b82f6"
+    },
+    {
+      "id": "truck_003",
+      "plateNumber": "YR 1859S",
+      "budget": 650,
+      "color": "#10b981"
+    },
+    {
+      "id": "truck_004",
+      "plateNumber": "YR 2284T",
+      "budget": 650,
+      "color": "#f59e0b"
+    }
+  ],
+  "records": [
+    {
+      "id": "1776776926522-p06gg9dqj",
+      "truckId": "truck_001",
+      "plateNumber": "GBH 218Z",
+      "date": "2026-04-21",
+      "time": "21:08",
+      "amount": 100,
+      "timestamp": 1776776926522,
+      "deleted": true,
+      "updatedAt": 1776777463705
+    },
+    {
+      "id": "1776773844609-gvlg1g25o",
+      "truckId": "truck_001",
+      "plateNumber": "GBH 218Z",
+      "date": "2026-04-21",
+      "time": "20:17",
+      "amount": 100,
+      "timestamp": 1776773844609,
+      "deleted": true,
+      "updatedAt": 1776778687038
+    },
+    {
+      "id": "1776777709130-jbm6hic0e",
+      "truckId": "truck_001",
+      "plateNumber": "GBH 218Z",
+      "date": "2026-04-21",
+      "time": "13:21",
+      "amount": 101,
+      "timestamp": 1776748860000,
+      "updatedAt": 1776778687038,
+      "deleted": true
+    }
+  ],
+  "meta": {
+    "version": "2.0",
+    "lastUpdated": "2026-04-21T13:58:37.685Z",
+    "totalRecords": 0,
+    "totalRecordsWithDeleted": 3
+  }
 }
