@@ -34,14 +34,14 @@
       "time": "14:34",
       "amount": 101,
       "timestamp": 1776753240000,
-      "updatedAt": 1776782072031,
-      "deleted": false
+      "updatedAt": 1776782196941,
+      "deleted": true
     }
   ],
   "meta": {
     "version": "2.0",
-    "lastUpdated": "2026-04-21T14:35:55.526Z",
-    "totalRecords": 1,
+    "lastUpdated": "2026-04-21T14:36:37.512Z",
+    "totalRecords": 0,
     "totalRecordsWithDeleted": 1
   }
 }
