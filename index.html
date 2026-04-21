@@ -1121,23 +1121,30 @@
             }
 
             // ✅ 第2步：软删除
-            async function deleteRecord(id) {
-                const record = records.find(r => r.id === id);
-                if (!record) return;
+            // 修改删除逻辑 - 确保同步
+async function deleteRecord(id) {
+    const record = records.find(r => r.id === id);
+    if (!record) return;
 
-                record.deleted = true;
-                record.updatedAt = Date.now();
+    record.deleted = true;
+    record.updatedAt = Date.now();
 
-                await db.put('records', record);
+    await db.put('records', record);
 
-                // 更新内存
-                const index = records.findIndex(r => r.id === id);
-                if (index !== -1) records[index] = record;
+    // 更新内存
+    const index = records.findIndex(r => r.id === id);
+    if (index !== -1) records[index] = record;
 
-                if (githubConfig.enabled && isOnline) {
-                    await syncWithGitHub();
-                }
-            }
+    // 立即同步到 GitHub
+    if (githubConfig.enabled) {
+        if (isOnline) {
+            showToast('Deleting & syncing...');
+            await syncWithGitHub();  // 确保等待同步完成
+        } else {
+            showToast('Record marked for deletion (will sync when online)');
+        }
+    }
+}
 
             async function saveSettings() {
                 await db.put('settings', { key: STORAGE_KEYS.SETTINGS, value: settings });
@@ -1365,120 +1372,173 @@
             }
 
             // ==================== GitHub Sync ====================
-            async function syncWithGitHub() {
-                if (!isOnline) {
-                    showToast('📴 Offline - Cannot sync now');
-                    return;
-                }
+async function syncWithGitHub() {
+    if (!isOnline) {
+        showToast('📴 Offline - Cannot sync now');
+        return;
+    }
 
-                if (!githubConfig.enabled || !githubConfig.owner || !githubConfig.repo || !githubConfig.token) {
-                    showToast('Please configure GitHub first');
-                    showGitHubConfigModal();
-                    return;
-                }
+    if (!githubConfig.enabled || !githubConfig.owner || !githubConfig.repo || !githubConfig.token) {
+        showToast('Please configure GitHub first');
+        showGitHubConfigModal();
+        return;
+    }
 
-                if (isSyncing) {
-                    showToast('Sync already in progress');
-                    return;
-                }
+    if (isSyncing) {
+        showToast('Sync already in progress');
+        return;
+    }
 
-                isSyncing = true;
-                updateSyncIndicator();
+    isSyncing = true;
+    updateSyncIndicator();
 
-                try {
-                    const url = `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/contents/${githubConfig.path}`;
-                    const response = await fetch(url, {
-                        headers: { 'Authorization': `token ${githubConfig.token}` }
-                    });
+    try {
+        const url = `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/contents/${githubConfig.path}`;
+        const response = await fetch(url, {
+            headers: { 'Authorization': `token ${githubConfig.token}` }
+        });
 
-                    let remoteData = null;
-                    let sha = null;
+        let remoteData = null;
+        let sha = null;
 
-                    if (response.ok) {
-                        const fileData = await response.json();
-                        sha = fileData.sha;
-                        const content = atob(fileData.content);
-                        remoteData = JSON.parse(content);
-                    }
-
-                    let finalData;
-                    if (remoteData) {
-                        finalData = mergeData(
-                            { trucks, records },
-                            { trucks: remoteData.trucks || [], records: remoteData.records || [] }
-                        );
-                    } else {
-                        finalData = { trucks, records };
-                    }
-
-                    finalData.meta = {
-                        version: '1.0',
-                        lastUpdated: new Date().toISOString(),
-                        totalRecords: finalData.records.filter(r => !r.deleted).length
-                    };
-
-                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(finalData, null, 2))));
-                    const putResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `token ${githubConfig.token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            message: `Update diesel records`,
-                            content: content,
-                            sha: sha
-                        })
-                    });
-
-                    if (!putResponse.ok) throw new Error('Failed to push data');
-
-                    trucks = finalData.trucks;
-                    records = finalData.records;
-                    await saveTrucks();
-                    
-                    // 清除旧记录并重新写入所有记录（包括软删除的）
-                    await db.clear('records');
-                    await db.putAll('records', records);
-
-                    githubConfig.lastSync = Date.now();
-                    await saveGithubConfig();
-
-                    renderAll();
-                    showToast('✅ Sync successful');
-                } catch (error) {
-                    console.error('Sync failed:', error);
-                    showToast('❌ Sync failed: ' + error.message);
-                } finally {
-                    isSyncing = false;
-                    updateSyncIndicator();
-                }
-            }
-
-            // ✅ 第4步：基于 updatedAt 合并
-            function mergeData(local, remote) {
-                const mergedTrucks = [...local.trucks];
-                remote.trucks.forEach(rt => {
-                    if (!mergedTrucks.find(lt => lt.id === rt.id)) {
-                        mergedTrucks.push(rt);
-                    }
-                });
-
-                const recordMap = new Map();
-                // 先处理本地
-                [...local.records, ...remote.records].forEach(r => {
-                    // 兼容旧数据
+        if (response.ok) {
+            const fileData = await response.json();
+            sha = fileData.sha;
+            const content = atob(fileData.content);
+            remoteData = JSON.parse(content);
+            
+            // 确保远程数据中的记录也有 deleted 和 updatedAt 字段
+            if (remoteData.records) {
+                remoteData.records.forEach(r => {
                     if (r.deleted === undefined) r.deleted = false;
                     if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
-                    
-                    const existing = recordMap.get(r.id);
-                    if (!existing || r.updatedAt > existing.updatedAt) {
-                        recordMap.set(r.id, r);
-                    }
                 });
-                const mergedRecords = Array.from(recordMap.values()).sort((a, b) => b.timestamp - a.timestamp);
-                return { trucks: mergedTrucks, records: mergedRecords };
             }
+        }
+
+        let finalData;
+        if (remoteData) {
+            // 合并数据
+            finalData = mergeData(
+                { trucks, records },
+                { trucks: remoteData.trucks || [], records: remoteData.records || [] }
+            );
+        } else {
+            finalData = { trucks, records };
+        }
+
+        // 确保所有记录都有必要的字段
+        finalData.records.forEach(r => {
+            if (r.deleted === undefined) r.deleted = false;
+            if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+        });
+
+        finalData.meta = {
+            version: '2.0',
+            lastUpdated: new Date().toISOString(),
+            totalRecords: finalData.records.filter(r => !r.deleted).length,
+            totalRecordsWithDeleted: finalData.records.length
+        };
+
+        const content = btoa(unescape(encodeURIComponent(JSON.stringify(finalData, null, 2))));
+        const putResponse = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${githubConfig.token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `Update diesel records (${finalData.meta.totalRecords} active)`,
+                content: content,
+                sha: sha
+            })
+        });
+
+        if (!putResponse.ok) {
+            const errorData = await putResponse.json();
+            throw new Error(errorData.message || 'Failed to push data');
+        }
+
+        // 更新本地数据
+        trucks = finalData.trucks;
+        records = finalData.records;
+        await saveTrucks();
+        
+        // 清除旧记录并重新写入所有记录（包括软删除的）
+        await db.clear('records');
+        await db.putAll('records', records);
+
+        githubConfig.lastSync = Date.now();
+        await saveGithubConfig();
+
+        renderAll();
+        
+        const activeCount = records.filter(r => !r.deleted).length;
+        const deletedCount = records.filter(r => r.deleted).length;
+        showToast(`✅ Synced (${activeCount} active, ${deletedCount} deleted)`);
+        
+    } catch (error) {
+        console.error('Sync failed:', error);
+        showToast('❌ Sync failed: ' + error.message);
+    } finally {
+        isSyncing = false;
+        updateSyncIndicator();
+    }
+}
+
+// ✅ 第4步：基于 updatedAt 合并（已修复）
+function mergeData(local, remote) {
+    // 合并 trucks
+    const mergedTrucks = [...local.trucks];
+    remote.trucks.forEach(rt => {
+        const existingIndex = mergedTrucks.findIndex(lt => lt.id === rt.id);
+        if (existingIndex === -1) {
+            mergedTrucks.push(rt);
+        }
+        // 注意：这里不处理 truck 的更新冲突，简单保留本地的
+    });
+
+    // 合并 records - 使用 updatedAt 作为版本控制
+    const recordMap = new Map();
+    
+    // 处理本地记录
+    local.records.forEach(r => {
+        // 确保有必要的字段
+        if (r.deleted === undefined) r.deleted = false;
+        if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+        recordMap.set(r.id, r);
+    });
+    
+    // 处理远程记录
+    remote.records.forEach(r => {
+        // 确保有必要的字段
+        if (r.deleted === undefined) r.deleted = false;
+        if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+        
+        const existing = recordMap.get(r.id);
+        if (!existing) {
+            // 本地没有，直接添加
+            recordMap.set(r.id, r);
+        } else {
+            // 本地有，比较 updatedAt，保留更新的版本
+            if (r.updatedAt > existing.updatedAt) {
+                recordMap.set(r.id, r);
+                console.log(`Record ${r.id} updated from remote (remote: ${r.updatedAt} > local: ${existing.updatedAt})`);
+            } else if (r.updatedAt < existing.updatedAt) {
+                console.log(`Record ${r.id} kept local version (local: ${existing.updatedAt} > remote: ${r.updatedAt})`);
+            } else {
+                console.log(`Record ${r.id} has same timestamp, kept existing`);
+            }
+        }
+    });
+    
+    const mergedRecords = Array.from(recordMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+    
+    return { 
+        trucks: mergedTrucks, 
+        records: mergedRecords 
+    };
+}
 
             // ==================== Modal Functions ====================
             function createModal(title, bodyHtml, footerHtml) {
