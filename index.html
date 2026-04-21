@@ -804,7 +804,6 @@
                         <div class="menu-item" id="manageTrucksBtn">🚛 Manage Trucks</div>
                         <div class="menu-item" id="viewAllRecordsBtn">📊 View All Records</div>
                         <div class="menu-item" id="exportBackupBtn">📤 Export Backup</div>
-                        <div class="menu-item" id="importBackupBtn">📥 Import Backup</div>
                         <div class="menu-item danger" id="clearDataBtn">🗑 Clear All Data</div>
                     </div>
                 </div>
@@ -1370,7 +1369,6 @@
                     finalData.meta = {
                         version: '1.0',
                         lastUpdated: new Date().toISOString(),
-                        lastUpdatedBy: settings.userName,
                         totalRecords: finalData.records.length
                     };
 
@@ -1382,7 +1380,7 @@
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            message: `Update diesel records - ${settings.userName}`,
+                            message: `Update diesel records`,
                             content: content,
                             sha: sha
                         })
@@ -1907,64 +1905,6 @@
                 showToast(`✅ Exported ${records.length} records`);
             }
 
-            function showImportBackupModal() {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.json';
-                input.onchange = async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    try {
-                        const text = await file.text();
-                        const data = JSON.parse(text);
-                        if (!data.records) throw new Error('Invalid backup');
-
-                        const html = `
-                            <div style="padding: 12px; background: rgba(0,0,0,0.04); border-radius: 12px; margin-bottom: 16px;">
-                                <div><strong>File:</strong> ${escapeHtml(file.name)}</div>
-                                <div><strong>Records:</strong> ${data.records.length}</div>
-                                <div><strong>Trucks:</strong> ${data.trucks?.length || 0}</div>
-                            </div>
-                            <div class="settings-item">
-                                <label class="settings-label">Import Mode</label>
-                                <select id="importMode" class="settings-input">
-                                    <option value="merge">🔄 Merge (keep existing, add new)</option>
-                                    <option value="replace">⚠️ Replace (delete all current data)</option>
-                                </select>
-                            </div>
-                        `;
-                        const modal = createModal('📥 Import Backup', html, `
-                            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-                            <button class="btn btn-primary" id="confirmImportBtn">Import</button>
-                        `);
-                        modal.querySelector('#confirmImportBtn').onclick = async () => {
-                            const mode = modal.querySelector('#importMode').value;
-                            if (mode === 'replace') {
-                                trucks = data.trucks || [...DEFAULT_TRUCKS];
-                                records = data.records;
-                                await saveTrucks();
-                                await db.clear('records');
-                                await db.putAll('records', records);
-                            } else {
-                                data.trucks?.forEach(rt => {
-                                    if (!trucks.find(t => t.id === rt.id)) trucks.push(rt);
-                                });
-                                await saveTrucks();
-                                const newRecords = data.records.filter(r => !records.some(ex => ex.id === r.id));
-                                await db.putAll('records', newRecords);
-                                records.push(...newRecords);
-                            }
-                            modal.remove();
-                            renderAll();
-                            showToast(`✅ Imported ${data.records.length} records`);
-                        };
-                    } catch (err) {
-                        showToast('❌ Invalid backup file');
-                    }
-                };
-                input.click();
-            }
-
             async function showClearDataModal() {
                 const html = `
                     <div style="text-align: center; padding: 16px 0;">
@@ -2018,8 +1958,7 @@
                     date: formatDate(now),
                     time: formatTime(now),
                     amount: amount,
-                    timestamp: now.getTime(),
-                    recordedBy: settings.userName
+                    timestamp: now.getTime()
                 };
                 await saveRecord(record);
                 amountInput.value = '';
@@ -2095,10 +2034,6 @@
                 document.getElementById('exportBackupBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showExportBackupModal();
-                });
-                document.getElementById('importBackupBtn').addEventListener('click', () => {
-                    document.getElementById('menuDropdown').classList.remove('show');
-                    showImportBackupModal();
                 });
                 document.getElementById('clearDataBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
