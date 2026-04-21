@@ -2092,44 +2092,58 @@ function mergeDataWithRemotePriority(local, remote) {
             }
 
             async function handleRecordDiesel() {
-                const amountInput = document.getElementById('amountInput');
-                const amount = parseFloat(amountInput.value);
-                if (!selectedTruckId) { 
-                    showToast('Select a Vehicle first'); 
-                    return; 
-                }
-                if (isNaN(amount) || amount <= 0) { 
-                    showToast('Valid amount required'); 
-                    return; 
-                }
-                const truck = trucks.find(t => t.id === selectedTruckId);
-                const stats = getTruckMonthStats(selectedTruckId);
-                if (stats.total + amount > truck.budget) {
-                    if (!confirm(`⚠️ Exceeds budget by S$${((stats.total + amount) - truck.budget).toFixed(2)}. Continue?`)) return;
-                }
-                const now = new Date();
-                const record = {
-                    id: generateId(),
-                    truckId: selectedTruckId,
-                    plateNumber: truck.plateNumber,
-                    date: formatDate(now),
-                    time: formatTime(now),
-                    amount: amount,
-                    timestamp: now.getTime(),
-                    updatedAt: Date.now(), // ✅ 第1步
-                    deleted: false          // ✅ 第1步
-                };
-                await saveRecord(record);
-                amountInput.value = '';
-                renderAll();
-                
-                if (githubConfig.enabled && isOnline) {
-                    showToast(`✅ Recorded S$${amount.toFixed(2)}. Syncing...`);
-                    await syncWithGitHub();
-                } else {
-                    showToast(`✅ Recorded S$${amount.toFixed(2)} for ${truck.plateNumber}`);
-                }
-            }
+    const amountInput = document.getElementById('amountInput');
+    const amount = parseFloat(amountInput.value);
+    
+    if (!selectedTruckId) { 
+        showToast('Select a Vehicle first'); 
+        return; 
+    }
+    
+    if (isNaN(amount) || amount <= 0) { 
+        showToast('Valid amount required'); 
+        return; 
+    }
+    
+    const truck = trucks.find(t => t.id === selectedTruckId);
+    const stats = getTruckMonthStats(selectedTruckId);
+    
+    if (stats.total + amount > truck.budget) {
+        if (!confirm(`⚠️ Exceeds budget by S$${((stats.total + amount) - truck.budget).toFixed(2)}. Continue?`)) return;
+    }
+    
+    const now = new Date();
+    const record = {
+        id: generateId(),
+        truckId: selectedTruckId,
+        plateNumber: truck.plateNumber,
+        date: formatDate(now),
+        time: formatTime(now),
+        amount: amount,
+        timestamp: now.getTime(),
+        updatedAt: Date.now(),
+        deleted: false
+    };
+    
+    await saveRecord(record);
+    
+    // 清空金额输入框
+    amountInput.value = '';
+    
+    // ✅ 清空选中的车牌ID，这样下次会显示"Select Vehicle"
+    selectedTruckId = null;
+    
+    // 重新渲染
+    renderAll();
+    
+    // 同步逻辑
+    if (githubConfig.enabled && isOnline) {
+        showToast(`✅ Recorded S$${amount.toFixed(2)}. Syncing...`);
+        await syncWithGitHub();
+    } else {
+        showToast(`✅ Recorded S$${amount.toFixed(2)} for ${truck.plateNumber}`);
+    }
+}
 
             // ==================== Initialize ====================
             async function init() {
