@@ -47,12 +47,23 @@
       "timestamp": 1776776926522,
       "deleted": true,
       "updatedAt": 1776777463705
+    },
+    {
+      "id": "1776773844609-gvlg1g25o",
+      "truckId": "truck_001",
+      "plateNumber": "GBH 218Z",
+      "date": "2026-04-21",
+      "time": "20:17",
+      "amount": 100,
+      "timestamp": 1776773844609,
+      "deleted": false,
+      "updatedAt": 1776773844609
     }
   ],
   "meta": {
     "version": "2.0",
-    "lastUpdated": "2026-04-21T13:22:37.704Z",
-    "totalRecords": 1,
-    "totalRecordsWithDeleted": 2
+    "lastUpdated": "2026-04-21T13:23:53.284Z",
+    "totalRecords": 2,
+    "totalRecordsWithDeleted": 3
   }
 }
