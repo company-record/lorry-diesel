@@ -33,12 +33,15 @@
       "date": "2026-04-21",
       "time": "21:08",
       "amount": 100,
-      "timestamp": 1776776926522
+      "timestamp": 1776776926522,
+      "deleted": false,
+      "updatedAt": 1776776926522
     }
   ],
   "meta": {
-    "version": "1.0",
-    "lastUpdated": "2026-04-21T13:09:06.589Z",
-    "totalRecords": 1
+    "version": "2.0",
+    "lastUpdated": "2026-04-21T13:17:15.243Z",
+    "totalRecords": 1,
+    "totalRecordsWithDeleted": 1
   }
 }
