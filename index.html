@@ -66,6 +66,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .app-title {
@@ -75,6 +77,38 @@
             display: flex;
             align-items: center;
             gap: 6px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .manual-sync-btn {
+            padding: 8px 14px;
+            background: var(--expense-color);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .manual-sync-btn:active {
+            transform: scale(0.95);
+            opacity: 0.9;
+        }
+
+        .manual-sync-btn:disabled {
+            opacity: 0.5;
+            transform: none;
         }
 
         .sync-indicator {
@@ -88,6 +122,7 @@
             background: var(--card-bg);
             border-radius: 20px;
             border: 1px solid var(--border-light);
+            white-space: nowrap;
         }
 
         .sync-indicator.synced { color: var(--success-color); }
@@ -790,7 +825,11 @@
                 ⛽ Diesel Log
                 <span id="connectionStatus" class="offline-badge" title="Connection status"></span>
             </div>
-            <div style="display: flex; gap: 8px;">
+            <div class="header-actions">
+                <button class="manual-sync-btn" id="manualSyncBtn" title="Sync with GitHub">
+                    <span id="syncBtnIcon">🔄</span>
+                    <span id="syncBtnText">Sync</span>
+                </button>
                 <div class="sync-indicator" id="syncIndicator">
                     <span id="syncIcon">💾</span>
                     <span id="syncText">Local</span>
@@ -860,6 +899,16 @@
         (function() {
             'use strict';
 
+            // ==================== WebView 兼容性补丁 ====================
+            const isWebView = /(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)/i.test(navigator.userAgent) || 
+                              /Android.*Version\/\d+\.\d+ Chrome\/\d+\.\d+/.test(navigator.userAgent) &&
+                              !/Safari/.test(navigator.userAgent) ||
+                              /wv/.test(navigator.userAgent);
+            
+            if (isWebView) {
+                console.log('📱 Running in WebView - applying compatibility patches');
+            }
+
             // ==================== Service Worker Registration ====================
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('./sw.js')
@@ -876,15 +925,15 @@
             };
 
             const DEFAULT_TRUCKS = [
-                { id: 'truck_001', plateNumber: 'GBH 218 Z', budget: 650, color: '#c2413a' },
-                { id: 'truck_002', plateNumber: 'YR 1868 R', budget: 650, color: '#3b82f6' },
-                { id: 'truck_003', plateNumber: 'YR 1859 S', budget: 650, color: '#10b981' },
-                { id: 'truck_004', plateNumber: 'YR 2284 T', budget: 650, color: '#f59e0b' }
+                { id: 'truck_001', plateNumber: 'GBH 218Z', budget: 650, color: '#c2413a' },
+                { id: 'truck_002', plateNumber: 'YR 1868R', budget: 650, color: '#3b82f6' },
+                { id: 'truck_003', plateNumber: 'YR 1859S', budget: 650, color: '#10b981' },
+                { id: 'truck_004', plateNumber: 'YR 2284T', budget: 650, color: '#f59e0b' }
             ];
 
             // ==================== State ====================
             let trucks = [];
-            let records = []; // 原始数据，可能包含 deleted: true
+            let records = [];
             let settings = { userName: 'Driver' };
             let githubConfig = {
                 owner: 'company-record',
@@ -904,7 +953,7 @@
             class DB {
                 constructor() {
                     this.dbName = 'DieselLogDB';
-                    this.version = 3; // 版本号增加，以便升级
+                    this.version = 3;
                     this.db = null;
                 }
 
@@ -924,7 +973,6 @@
                                 recordsStore.createIndex('deleted', 'deleted', { unique: false });
                                 recordsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
                             } else {
-                                // 如果 store 已存在，可能需要创建索引（如果是旧版本升级）
                                 const tx = e.target.transaction;
                                 const store = tx.objectStore('records');
                                 if (!store.indexNames.contains('deleted')) store.createIndex('deleted', 'deleted', { unique: false });
@@ -1067,7 +1115,6 @@
                 return 'other';
             }
 
-            // 获取未删除的记录
             function getActiveRecords() {
                 return records.filter(r => !r.deleted);
             }
@@ -1082,14 +1129,12 @@
 
                     records = await db.getAll('records');
                     
-                    // 兼容旧数据：如果没有 updatedAt 或 deleted 字段，自动补充
                     let needUpdate = false;
                     records.forEach(r => {
                         if (r.deleted === undefined) { r.deleted = false; needUpdate = true; }
                         if (r.updatedAt === undefined) { r.updatedAt = r.timestamp || Date.now(); needUpdate = true; }
                     });
                     if (needUpdate) {
-                        // 批量更新旧数据到数据库
                         await db.putAll('records', records);
                     }
 
@@ -1110,41 +1155,35 @@
             }
 
             async function saveRecord(record) {
-                // 确保有 updatedAt 和 deleted 字段
                 if (!record.updatedAt) record.updatedAt = Date.now();
                 if (record.deleted === undefined) record.deleted = false;
                 await db.put('records', record);
-                // 如果已存在则更新，否则添加
                 const index = records.findIndex(r => r.id === record.id);
                 if (index !== -1) records[index] = record;
                 else records.push(record);
             }
 
-            // ✅ 第2步：软删除
-            // 修改删除逻辑 - 确保同步
-async function deleteRecord(id) {
-    const record = records.find(r => r.id === id);
-    if (!record) return;
+            async function deleteRecord(id) {
+                const record = records.find(r => r.id === id);
+                if (!record) return;
 
-    record.deleted = true;
-    record.updatedAt = Date.now();
+                record.deleted = true;
+                record.updatedAt = Date.now();
 
-    await db.put('records', record);
+                await db.put('records', record);
 
-    // 更新内存
-    const index = records.findIndex(r => r.id === id);
-    if (index !== -1) records[index] = record;
+                const index = records.findIndex(r => r.id === id);
+                if (index !== -1) records[index] = record;
 
-    // 立即同步到 GitHub
-    if (githubConfig.enabled) {
-        if (isOnline) {
-            showToast('Deleting & syncing...');
-            await syncWithGitHub();  // 确保等待同步完成
-        } else {
-            showToast('Record marked for deletion (will sync when online)');
-        }
-    }
-}
+                if (githubConfig.enabled) {
+                    if (isOnline) {
+                        showToast('Deleting & syncing...');
+                        await syncWithGitHub();
+                    } else {
+                        showToast('Record marked for deletion (will sync when online)');
+                    }
+                }
+            }
 
             async function saveSettings() {
                 await db.put('settings', { key: STORAGE_KEYS.SETTINGS, value: settings });
@@ -1235,7 +1274,8 @@ async function deleteRecord(id) {
                 `).join('');
 
                 dropdown.querySelectorAll('.truck-option').forEach(opt => {
-                    opt.addEventListener('click', () => {
+                    opt.addEventListener('click', (e) => {
+                        e.stopPropagation();
                         selectedTruckId = opt.dataset.truckId;
                         renderInputSection();
                         dropdown.classList.remove('show');
@@ -1351,221 +1391,221 @@ async function deleteRecord(id) {
                 const indicator = document.getElementById('syncIndicator');
                 const icon = document.getElementById('syncIcon');
                 const text = document.getElementById('syncText');
+                
+                const syncBtn = document.getElementById('manualSyncBtn');
+                const syncBtnIcon = document.getElementById('syncBtnIcon');
+                const syncBtnText = document.getElementById('syncBtnText');
 
                 if (isSyncing) {
                     indicator.className = 'sync-indicator syncing';
                     icon.textContent = '🔄';
                     text.textContent = 'Syncing...';
+                    
+                    if (syncBtn) {
+                        syncBtn.disabled = true;
+                        syncBtnIcon.textContent = '⏳';
+                        syncBtnText.textContent = 'Syncing...';
+                    }
                 } else if (githubConfig.enabled && githubConfig.lastSync) {
                     indicator.className = 'sync-indicator synced';
                     icon.textContent = '✅';
                     text.textContent = `Synced ${formatRelativeTime(githubConfig.lastSync)}`;
+                    
+                    if (syncBtn) {
+                        syncBtn.disabled = false;
+                        syncBtnIcon.textContent = '🔄';
+                        syncBtnText.textContent = 'Sync';
+                    }
                 } else if (githubConfig.enabled) {
                     indicator.className = 'sync-indicator unsynced';
                     icon.textContent = '⚠️';
                     text.textContent = 'Not synced';
+                    
+                    if (syncBtn) {
+                        syncBtn.disabled = false;
+                        syncBtnIcon.textContent = '🔄';
+                        syncBtnText.textContent = 'Sync';
+                    }
                 } else {
                     indicator.className = 'sync-indicator';
                     icon.textContent = '💾';
                     text.textContent = 'Local only';
+                    
+                    if (syncBtn) {
+                        syncBtn.disabled = false;
+                        syncBtnIcon.textContent = '🔐';
+                        syncBtnText.textContent = 'Setup';
+                    }
                 }
             }
 
             // ==================== GitHub Sync ====================
-async function syncWithGitHub() {
-    if (!isOnline) {
-        showToast('📴 Offline - Cannot sync now');
-        return;
-    }
+            async function syncWithGitHub() {
+                if (!isOnline) {
+                    showToast('📴 Offline - Cannot sync now');
+                    return;
+                }
 
-    if (!githubConfig.enabled || !githubConfig.owner || !githubConfig.repo || !githubConfig.token) {
-        showToast('Please configure GitHub first');
-        showGitHubConfigModal();
-        return;
-    }
+                if (!githubConfig.enabled || !githubConfig.owner || !githubConfig.repo || !githubConfig.token) {
+                    showToast('Please configure GitHub first');
+                    showGitHubConfigModal();
+                    return;
+                }
 
-    if (isSyncing) {
-        showToast('Sync already in progress');
-        return;
-    }
+                if (isSyncing) {
+                    showToast('Sync already in progress');
+                    return;
+                }
 
-    isSyncing = true;
-    updateSyncIndicator();
+                isSyncing = true;
+                updateSyncIndicator();
 
-    try {
-        const url = `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/contents/${githubConfig.path}`;
-        const response = await fetch(url, {
-            headers: { 'Authorization': `token ${githubConfig.token}` }
-        });
+                try {
+                    const url = `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/contents/${githubConfig.path}`;
+                    const response = await fetch(url, {
+                        headers: { 'Authorization': `token ${githubConfig.token}` }
+                    });
 
-        let remoteData = null;
-        let sha = null;
+                    let remoteData = null;
+                    let sha = null;
 
-        if (response.ok) {
-            const fileData = await response.json();
-            sha = fileData.sha;
-            const content = atob(fileData.content);
-            remoteData = JSON.parse(content);
-            
-            // 确保远程数据中的记录也有 deleted 和 updatedAt 字段
-            if (remoteData.records) {
-                remoteData.records.forEach(r => {
+                    if (response.ok) {
+                        const fileData = await response.json();
+                        sha = fileData.sha;
+                        const content = atob(fileData.content);
+                        remoteData = JSON.parse(content);
+                        
+                        if (remoteData.records) {
+                            remoteData.records.forEach(r => {
+                                if (r.deleted === undefined) r.deleted = false;
+                                if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+                            });
+                        }
+                    }
+
+                    let finalData;
+                    if (remoteData) {
+                        finalData = mergeDataWithRemotePriority(
+                            { trucks, records },
+                            { trucks: remoteData.trucks || [], records: remoteData.records || [] }
+                        );
+                    } else {
+                        finalData = { trucks, records };
+                    }
+
+                    finalData.records.forEach(r => {
+                        if (r.deleted === undefined) r.deleted = false;
+                        if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+                    });
+
+                    finalData.meta = {
+                        version: '2.0',
+                        lastUpdated: new Date().toISOString(),
+                        totalRecords: finalData.records.filter(r => !r.deleted).length,
+                        totalRecordsWithDeleted: finalData.records.length
+                    };
+
+                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(finalData, null, 2))));
+                    const putResponse = await fetch(url, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${githubConfig.token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Update diesel records (${finalData.meta.totalRecords} active)`,
+                            content: content,
+                            sha: sha
+                        })
+                    });
+
+                    if (!putResponse.ok) {
+                        const errorData = await putResponse.json();
+                        throw new Error(errorData.message || 'Failed to push data');
+                    }
+
+                    trucks = finalData.trucks;
+                    records = finalData.records;
+                    await saveTrucks();
+                    
+                    await db.clear('records');
+                    await db.putAll('records', records);
+
+                    githubConfig.lastSync = Date.now();
+                    await saveGithubConfig();
+
+                    renderAll();
+                    
+                    const activeCount = records.filter(r => !r.deleted).length;
+                    const deletedCount = records.filter(r => r.deleted).length;
+                    showToast(`✅ Synced (${activeCount} active, ${deletedCount} deleted)`);
+                    
+                } catch (error) {
+                    console.error('Sync failed:', error);
+                    showToast('❌ Sync failed: ' + error.message);
+                } finally {
+                    isSyncing = false;
+                    updateSyncIndicator();
+                }
+            }
+
+            function mergeDataWithRemotePriority(local, remote) {
+                const mergedTrucks = [...remote.trucks];
+                local.trucks.forEach(lt => {
+                    const existingIndex = mergedTrucks.findIndex(rt => rt.id === lt.id);
+                    if (existingIndex === -1) {
+                        mergedTrucks.push(lt);
+                    } else {
+                        const remoteTruck = mergedTrucks[existingIndex];
+                        mergedTrucks[existingIndex] = {
+                            ...remoteTruck,
+                            budget: lt.budget || remoteTruck.budget,
+                            color: lt.color || remoteTruck.color
+                        };
+                    }
+                });
+
+                const recordMap = new Map();
+                
+                remote.records.forEach(r => {
                     if (r.deleted === undefined) r.deleted = false;
                     if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+                    recordMap.set(r.id, r);
                 });
+                
+                local.records.forEach(localRecord => {
+                    if (localRecord.deleted === undefined) localRecord.deleted = false;
+                    if (localRecord.updatedAt === undefined) localRecord.updatedAt = localRecord.timestamp || Date.now();
+                    
+                    const remoteRecord = recordMap.get(localRecord.id);
+                    
+                    if (!remoteRecord) {
+                        if (!localRecord.deleted) {
+                            const isRecent = (Date.now() - localRecord.timestamp) < 300000;
+                            if (isRecent) {
+                                recordMap.set(localRecord.id, localRecord);
+                            } else {
+                                localRecord.deleted = true;
+                                localRecord.updatedAt = Date.now();
+                                recordMap.set(localRecord.id, localRecord);
+                            }
+                        } else {
+                            recordMap.set(localRecord.id, localRecord);
+                        }
+                    } else {
+                        if (localRecord.updatedAt > remoteRecord.updatedAt) {
+                            recordMap.set(localRecord.id, localRecord);
+                        }
+                    }
+                });
+                
+                const mergedRecords = Array.from(recordMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+                
+                return { 
+                    trucks: mergedTrucks, 
+                    records: mergedRecords 
+                };
             }
-        }
-
-        let finalData;
-        if (remoteData) {
-            // 合并数据 - 远程数据优先
-            finalData = mergeDataWithRemotePriority(
-                { trucks, records },
-                { trucks: remoteData.trucks || [], records: remoteData.records || [] }
-            );
-        } else {
-            // 远程没有数据，使用本地数据
-            finalData = { trucks, records };
-        }
-
-        // 确保所有记录都有必要的字段
-        finalData.records.forEach(r => {
-            if (r.deleted === undefined) r.deleted = false;
-            if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
-        });
-
-        finalData.meta = {
-            version: '2.0',
-            lastUpdated: new Date().toISOString(),
-            totalRecords: finalData.records.filter(r => !r.deleted).length,
-            totalRecordsWithDeleted: finalData.records.length
-        };
-
-        const content = btoa(unescape(encodeURIComponent(JSON.stringify(finalData, null, 2))));
-        const putResponse = await fetch(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${githubConfig.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: `Update diesel records (${finalData.meta.totalRecords} active)`,
-                content: content,
-                sha: sha
-            })
-        });
-
-        if (!putResponse.ok) {
-            const errorData = await putResponse.json();
-            throw new Error(errorData.message || 'Failed to push data');
-        }
-
-        // 更新本地数据
-        trucks = finalData.trucks;
-        records = finalData.records;
-        await saveTrucks();
-        
-        // 清除旧记录并重新写入所有记录（包括软删除的）
-        await db.clear('records');
-        await db.putAll('records', records);
-
-        githubConfig.lastSync = Date.now();
-        await saveGithubConfig();
-
-        renderAll();
-        
-        const activeCount = records.filter(r => !r.deleted).length;
-        const deletedCount = records.filter(r => r.deleted).length;
-        showToast(`✅ Synced (${activeCount} active, ${deletedCount} deleted)`);
-        
-    } catch (error) {
-        console.error('Sync failed:', error);
-        showToast('❌ Sync failed: ' + error.message);
-    } finally {
-        isSyncing = false;
-        updateSyncIndicator();
-    }
-}
-
-// ✅ 新的合并函数 - 远程数据优先
-function mergeDataWithRemotePriority(local, remote) {
-    // 合并 trucks - 远程优先，但保留本地的预算等设置
-    const mergedTrucks = [...remote.trucks];
-    local.trucks.forEach(lt => {
-        const existingIndex = mergedTrucks.findIndex(rt => rt.id === lt.id);
-        if (existingIndex === -1) {
-            // 远程没有，添加本地卡车
-            mergedTrucks.push(lt);
-        } else {
-            // 远程有，但保留本地的一些设置（如预算）
-            const remoteTruck = mergedTrucks[existingIndex];
-            mergedTrucks[existingIndex] = {
-                ...remoteTruck,
-                budget: lt.budget || remoteTruck.budget,  // 优先使用本地预算
-                color: lt.color || remoteTruck.color       // 优先使用本地颜色
-            };
-        }
-    });
-
-    // 合并 records - 基于远程数据，但比较 updatedAt
-    const recordMap = new Map();
-    
-    // 首先，将远程所有记录加入 Map（这是基础）
-    remote.records.forEach(r => {
-        if (r.deleted === undefined) r.deleted = false;
-        if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
-        recordMap.set(r.id, r);
-    });
-    
-    // 然后处理本地记录
-    local.records.forEach(localRecord => {
-        // 确保有必要的字段
-        if (localRecord.deleted === undefined) localRecord.deleted = false;
-        if (localRecord.updatedAt === undefined) localRecord.updatedAt = localRecord.timestamp || Date.now();
-        
-        const remoteRecord = recordMap.get(localRecord.id);
-        
-        if (!remoteRecord) {
-            // 远程没有这条记录
-            // 检查本地记录是否应该被保留
-            if (!localRecord.deleted) {
-                // 如果是未删除的记录，检查创建时间
-                const isRecent = (Date.now() - localRecord.timestamp) < 300000; // 5分钟内创建的
-                if (isRecent) {
-                    // 最近创建的记录，保留
-                    recordMap.set(localRecord.id, localRecord);
-                    console.log(`Keeping recent local record: ${localRecord.id}`);
-                } else {
-                    // 旧记录，但远程没有，说明在远程被删除了，标记为删除
-                    localRecord.deleted = true;
-                    localRecord.updatedAt = Date.now();
-                    recordMap.set(localRecord.id, localRecord);
-                    console.log(`Marking local record as deleted (not in remote): ${localRecord.id}`);
-                }
-            } else {
-                // 本地已删除的记录，但远程没有，保留删除状态
-                recordMap.set(localRecord.id, localRecord);
-            }
-        } else {
-            // 远程有这条记录，比较 updatedAt
-            if (localRecord.updatedAt > remoteRecord.updatedAt) {
-                // 本地更新，使用本地版本
-                recordMap.set(localRecord.id, localRecord);
-                console.log(`Using local version (newer): ${localRecord.id}`);
-            } else {
-                // 远程更新或相同，使用远程版本
-                console.log(`Using remote version: ${localRecord.id}`);
-            }
-        }
-    });
-    
-    const mergedRecords = Array.from(recordMap.values()).sort((a, b) => b.timestamp - a.timestamp);
-    
-    return { 
-        trucks: mergedTrucks, 
-        records: mergedRecords 
-    };
-}
 
             // ==================== Modal Functions ====================
             function createModal(title, bodyHtml, footerHtml) {
@@ -1765,13 +1805,11 @@ function mergeDataWithRemotePriority(local, remote) {
                             const truckId = b.dataset.id;
                             trucks = trucks.filter(t => t.id !== truckId);
                             
-                            // 软删除该卡车的所有记录
                             for (const r of records.filter(r => r.truckId === truckId)) {
                                 r.deleted = true;
                                 r.updatedAt = Date.now();
                                 await db.put('records', r);
                             }
-                            // 更新内存
                             records.forEach(r => { if (r.truckId === truckId) r.deleted = true; });
                             
                             await saveTrucks();
@@ -1796,7 +1834,7 @@ function mergeDataWithRemotePriority(local, remote) {
                 const html = `
                     <div class="settings-item">
                         <label class="settings-label">Plate Number</label>
-                        <input type="text" id="newPlateNumber" class="settings-input" placeholder="e.g., GBH 218 Z">
+                        <input type="text" id="newPlateNumber" class="settings-input" placeholder="e.g., GBH 218Z">
                     </div>
                     <div class="settings-item">
                         <label class="settings-label">Monthly Budget (S$)</label>
@@ -1906,7 +1944,7 @@ function mergeDataWithRemotePriority(local, remote) {
                     record.timestamp = newDateTime.getTime();
                     record.date = formatDate(newDateTime);
                     record.time = formatTime(newDateTime);
-                    record.updatedAt = Date.now(); // ✅ 更新 updatedAt
+                    record.updatedAt = Date.now();
                     await db.put('records', record);
                     const index = records.findIndex(r => r.id === record.id);
                     if (index !== -1) records[index] = record;
@@ -2051,7 +2089,7 @@ function mergeDataWithRemotePriority(local, remote) {
                 const data = {
                     meta: { version: '2.0', exportDate: new Date().toISOString(), totalRecords: activeRecords.length },
                     trucks,
-                    records: records // 包含软删除记录，方便恢复
+                    records: records
                 };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a');
@@ -2092,58 +2130,45 @@ function mergeDataWithRemotePriority(local, remote) {
             }
 
             async function handleRecordDiesel() {
-    const amountInput = document.getElementById('amountInput');
-    const amount = parseFloat(amountInput.value);
-    
-    if (!selectedTruckId) { 
-        showToast('Select a Vehicle first'); 
-        return; 
-    }
-    
-    if (isNaN(amount) || amount <= 0) { 
-        showToast('Valid amount required'); 
-        return; 
-    }
-    
-    const truck = trucks.find(t => t.id === selectedTruckId);
-    const stats = getTruckMonthStats(selectedTruckId);
-    
-    if (stats.total + amount > truck.budget) {
-        if (!confirm(`⚠️ Exceeds budget by S$${((stats.total + amount) - truck.budget).toFixed(2)}. Continue?`)) return;
-    }
-    
-    const now = new Date();
-    const record = {
-        id: generateId(),
-        truckId: selectedTruckId,
-        plateNumber: truck.plateNumber,
-        date: formatDate(now),
-        time: formatTime(now),
-        amount: amount,
-        timestamp: now.getTime(),
-        updatedAt: Date.now(),
-        deleted: false
-    };
-    
-    await saveRecord(record);
-    
-    // 清空金额输入框
-    amountInput.value = '';
-    
-    // ✅ 清空选中的车牌ID，这样下次会显示"Select Vehicle"
-    selectedTruckId = null;
-    
-    // 重新渲染
-    renderAll();
-    
-    // 同步逻辑
-    if (githubConfig.enabled && isOnline) {
-        showToast(`✅ Recorded S$${amount.toFixed(2)}. Syncing...`);
-        await syncWithGitHub();
-    } else {
-        showToast(`✅ Recorded S$${amount.toFixed(2)} for ${truck.plateNumber}`);
-    }
-}
+                const amountInput = document.getElementById('amountInput');
+                const amount = parseFloat(amountInput.value);
+                if (!selectedTruckId) { 
+                    showToast('Select a Vehicle first'); 
+                    return; 
+                }
+                if (isNaN(amount) || amount <= 0) { 
+                    showToast('Valid amount required'); 
+                    return; 
+                }
+                const truck = trucks.find(t => t.id === selectedTruckId);
+                const stats = getTruckMonthStats(selectedTruckId);
+                if (stats.total + amount > truck.budget) {
+                    if (!confirm(`⚠️ Exceeds budget by S$${((stats.total + amount) - truck.budget).toFixed(2)}. Continue?`)) return;
+                }
+                const now = new Date();
+                const record = {
+                    id: generateId(),
+                    truckId: selectedTruckId,
+                    plateNumber: truck.plateNumber,
+                    date: formatDate(now),
+                    time: formatTime(now),
+                    amount: amount,
+                    timestamp: now.getTime(),
+                    updatedAt: Date.now(),
+                    deleted: false
+                };
+                await saveRecord(record);
+                amountInput.value = '';
+                selectedTruckId = null; // 重置选择
+                renderAll();
+                
+                if (githubConfig.enabled && isOnline) {
+                    showToast(`✅ Recorded S$${amount.toFixed(2)}. Syncing...`);
+                    await syncWithGitHub();
+                } else {
+                    showToast(`✅ Recorded S$${amount.toFixed(2)} for ${truck.plateNumber}`);
+                }
+            }
 
             // ==================== Initialize ====================
             async function init() {
@@ -2162,18 +2187,44 @@ function mergeDataWithRemotePriority(local, remote) {
                     this.value = val;
                 });
 
-                document.getElementById('truckSelectTrigger').addEventListener('click', () => {
+                document.getElementById('truckSelectTrigger').addEventListener('click', (e) => {
+                    e.stopPropagation();
                     document.getElementById('truckDropdown').classList.toggle('show');
                 });
+                
                 document.addEventListener('click', (e) => {
-                    if (!e.target.closest('.truck-selector')) document.getElementById('truckDropdown').classList.remove('show');
+                    const dropdown = document.getElementById('truckDropdown');
+                    const trigger = document.getElementById('truckSelectTrigger');
+                    if (!trigger.contains(e.target) && !dropdown.contains(e.target)) {
+                        dropdown.classList.remove('show');
+                    }
+                    
+                    const menuDropdown = document.getElementById('menuDropdown');
+                    const menuBtn = document.getElementById('menuBtn');
+                    if (!menuBtn.contains(e.target) && !menuDropdown.contains(e.target)) {
+                        menuDropdown.classList.remove('show');
+                    }
                 });
 
-                document.getElementById('menuBtn').addEventListener('click', () => {
+                document.getElementById('menuBtn').addEventListener('click', (e) => {
+                    e.stopPropagation();
                     document.getElementById('menuDropdown').classList.toggle('show');
                 });
-                document.addEventListener('click', (e) => {
-                    if (!e.target.closest('.menu-container')) document.getElementById('menuDropdown').classList.remove('show');
+
+                // Manual Sync Button
+                document.getElementById('manualSyncBtn').addEventListener('click', async () => {
+                    if (isSyncing) {
+                        showToast('Sync already in progress...');
+                        return;
+                    }
+                    
+                    if (!githubConfig.enabled) {
+                        showGitHubConfigModal();
+                        return;
+                    }
+                    
+                    showToast('Starting manual sync...');
+                    await syncWithGitHub();
                 });
 
                 document.getElementById('installGuideBtn').addEventListener('click', () => {
@@ -2191,44 +2242,99 @@ function mergeDataWithRemotePriority(local, remote) {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showGitHubConfigModal();
                 });
+                
                 document.getElementById('exportNoteBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showExportNoteModal();
                 });
+                
                 document.getElementById('manageTrucksBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showManageTrucksModal();
                 });
+                
                 document.getElementById('viewAllRecordsBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showViewAllRecordsModal();
                 });
+                
                 document.getElementById('viewAllBtn').addEventListener('click', () => showViewAllRecordsModal());
+                
                 document.getElementById('exportBackupBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showExportBackupModal();
                 });
+                
                 document.getElementById('clearDataBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
                     showClearDataModal();
                 });
+                
                 document.getElementById('syncIndicator').addEventListener('click', () => {
                     if (githubConfig.enabled) syncWithGitHub();
                     else showGitHubConfigModal();
                 });
 
                 // Connection status
-                window.addEventListener('online', () => { isOnline = true; updateConnectionStatus(); showToast('📶 Back online'); });
-                window.addEventListener('offline', () => { isOnline = false; updateConnectionStatus(); showToast('📴 Offline mode'); });
+                window.addEventListener('online', () => { 
+                    isOnline = true; 
+                    updateConnectionStatus(); 
+                    showToast('📶 Back online');
+                    if (githubConfig.enabled) {
+                        setTimeout(() => syncWithGitHub(), 1000);
+                    }
+                });
+                
+                window.addEventListener('offline', () => { 
+                    isOnline = false; 
+                    updateConnectionStatus(); 
+                    showToast('📴 Offline mode'); 
+                });
 
-                // Auto-sync
-                if (githubConfig.enabled && isOnline) {
-                    setTimeout(() => {
-                        if (!githubConfig.lastSync || (Date.now() - githubConfig.lastSync) > 60000) {
-                            syncWithGitHub();
+                // WebView 特定的自动同步策略
+                async function attemptAutoSync(attempts = 0) {
+                    if (attempts > 5) return;
+                    
+                    if (githubConfig.enabled && isOnline) {
+                        console.log(`Auto-sync attempt ${attempts + 1}`);
+                        
+                        try {
+                            const testFetch = await fetch('https://api.github.com/zen', {
+                                method: 'HEAD',
+                                cache: 'no-cache'
+                            });
+                            
+                            if (testFetch.ok || testFetch.status === 200) {
+                                await syncWithGitHub();
+                                return;
+                            }
+                        } catch (e) {
+                            console.log('Network not ready, retrying...');
                         }
-                    }, 1000);
+                        
+                        setTimeout(() => attemptAutoSync(attempts + 1), 2000);
+                    }
                 }
+                
+                // 启动后延迟自动同步
+                setTimeout(() => attemptAutoSync(), 1500);
+                
+                // 页面可见性变化时尝试同步
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && githubConfig.enabled && isOnline) {
+                        setTimeout(() => syncWithGitHub(), 500);
+                    }
+                });
+                
+                // 定期同步检查（每30秒）
+                setInterval(() => {
+                    if (githubConfig.enabled && isOnline && !isSyncing) {
+                        if (!githubConfig.lastSync || (Date.now() - githubConfig.lastSync) > 60000) {
+                            console.log('Periodic sync triggered');
+                            syncWithGitHub().catch(e => console.log('Periodic sync failed:', e));
+                        }
+                    }
+                }, 30000);
             }
 
             init();
