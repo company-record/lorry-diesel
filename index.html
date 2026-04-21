@@ -23,6 +23,7 @@
     <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
     
     <style>
+        /* 所有样式保持不变 */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -1073,9 +1074,6 @@
 
                     const githubData = loadedSettings.find(s => s.key === STORAGE_KEYS.GITHUB);
                     if (githubData) githubConfig = { ...githubConfig, ...githubData.value };
-
-                    // 不自动选择卡车，让用户手动选择
-                    // selectedTruckId 保持为 null
                 } catch (e) {
                     console.error('Load failed:', e);
                     trucks = [...DEFAULT_TRUCKS];
@@ -1092,9 +1090,15 @@
                 records.push(record);
             }
 
+            // 修改删除记录函数 - 删除后自动同步
             async function deleteRecord(id) {
                 await db.delete('records', id);
                 records = records.filter(r => r.id !== id);
+                
+                // 如果启用了 GitHub 同步，自动同步删除操作
+                if (githubConfig.enabled && isOnline) {
+                    await syncWithGitHub();
+                }
             }
 
             async function saveSettings() {
@@ -1265,13 +1269,14 @@
                     showEditRecordModal(record);
                 });
 
+                // 修改删除逻辑 - 使用新的 deleteRecord 函数
                 menu.querySelector('[data-action="delete"]').addEventListener('click', async () => {
                     menu.remove();
                     currentRecordMenu = null;
                     if (confirm(`Delete this record of S$${record.amount.toFixed(2)}?`)) {
                         await deleteRecord(record.id);
                         renderAll();
-                        showToast('Record deleted');
+                        showToast('Record deleted' + (githubConfig.enabled ? ' & synced' : ''));
                     }
                 });
 
@@ -1619,18 +1624,30 @@
                         if (t) { modal.remove(); showEditTruckModal(t); }
                     };
                 });
+                // 修改删除卡车逻辑
                 modal.querySelectorAll('.delete-truck').forEach(b => {
                     b.onclick = async () => {
                         if (confirm('Delete this truck and all its records?')) {
                             const truckId = b.dataset.id;
                             trucks = trucks.filter(t => t.id !== truckId);
+                            
+                            // 删除该卡车的所有记录
+                            const recordsToDelete = records.filter(r => r.truckId === truckId);
+                            for (const r of recordsToDelete) {
+                                await db.delete('records', r.id);
+                            }
                             records = records.filter(r => r.truckId !== truckId);
+                            
                             await saveTrucks();
-                            await db.clear('records');
-                            await db.putAll('records', records);
+                            
+                            // 同步到 GitHub
+                            if (githubConfig.enabled && isOnline) {
+                                await syncWithGitHub();
+                            }
+                            
                             modal.remove();
                             renderAll();
-                            showToast('Truck deleted');
+                            showToast('Truck deleted' + (githubConfig.enabled ? ' & synced' : ''));
                         }
                     };
                 });
@@ -1713,13 +1730,14 @@
                         if (r) { modal.remove(); showEditRecordModal(r); }
                     };
                 });
+                // 修改删除逻辑
                 modal.querySelectorAll('.delete-record').forEach(btn => {
                     btn.onclick = async () => {
                         if (confirm('Delete this record?')) {
                             await deleteRecord(btn.dataset.id);
                             modal.remove();
                             renderAll();
-                            showToast('Record deleted');
+                            showToast('Record deleted' + (githubConfig.enabled ? ' & synced' : ''));
                         }
                     };
                 });
@@ -1828,13 +1846,14 @@
                             if (r) { modal.remove(); showEditRecordModal(r); }
                         };
                     });
+                    // 修改删除逻辑
                     container.querySelectorAll('.delete-record').forEach(btn => {
                         btn.onclick = async () => {
                             if (confirm('Delete this record?')) {
                                 await deleteRecord(btn.dataset.id);
                                 renderFilteredRecords();
                                 renderAll();
-                                showToast('Record deleted');
+                                showToast('Record deleted' + (githubConfig.enabled ? ' & synced' : ''));
                             }
                         };
                     });
@@ -2048,9 +2067,13 @@
                 window.addEventListener('online', () => { isOnline = true; updateConnectionStatus(); showToast('📶 Back online'); });
                 window.addEventListener('offline', () => { isOnline = false; updateConnectionStatus(); showToast('📴 Offline mode'); });
 
-                // Auto-sync
+                // Auto-sync - 只在没有最近同步的情况下自动同步
                 if (githubConfig.enabled && isOnline) {
-                    setTimeout(() => syncWithGitHub(), 1000);
+                    setTimeout(() => {
+                        if (!githubConfig.lastSync || (Date.now() - githubConfig.lastSync) > 60000) {
+                            syncWithGitHub();
+                        }
+                    }, 1000);
                 }
             }
 
