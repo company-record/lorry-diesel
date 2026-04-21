@@ -884,7 +884,7 @@
 
             // ==================== State ====================
             let trucks = [];
-            let records = [];
+            let records = []; // 原始数据，可能包含 deleted: true
             let settings = { userName: 'Driver' };
             let githubConfig = {
                 owner: 'company-record',
@@ -904,7 +904,7 @@
             class DB {
                 constructor() {
                     this.dbName = 'DieselLogDB';
-                    this.version = 2;
+                    this.version = 3; // 版本号增加，以便升级
                     this.db = null;
                 }
 
@@ -921,6 +921,14 @@
                                 recordsStore.createIndex('truckId', 'truckId', { unique: false });
                                 recordsStore.createIndex('timestamp', 'timestamp', { unique: false });
                                 recordsStore.createIndex('date', 'date', { unique: false });
+                                recordsStore.createIndex('deleted', 'deleted', { unique: false });
+                                recordsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                            } else {
+                                // 如果 store 已存在，可能需要创建索引（如果是旧版本升级）
+                                const tx = e.target.transaction;
+                                const store = tx.objectStore('records');
+                                if (!store.indexNames.contains('deleted')) store.createIndex('deleted', 'deleted', { unique: false });
+                                if (!store.indexNames.contains('updatedAt')) store.createIndex('updatedAt', 'updatedAt', { unique: false });
                             }
                             if (!db.objectStoreNames.contains('settings')) {
                                 db.createObjectStore('settings', { keyPath: 'key' });
@@ -1059,6 +1067,11 @@
                 return 'other';
             }
 
+            // 获取未删除的记录
+            function getActiveRecords() {
+                return records.filter(r => !r.deleted);
+            }
+
             // ==================== Data Management ====================
             async function loadData() {
                 try {
@@ -1068,6 +1081,17 @@
                     else trucks = [...DEFAULT_TRUCKS];
 
                     records = await db.getAll('records');
+                    
+                    // 兼容旧数据：如果没有 updatedAt 或 deleted 字段，自动补充
+                    let needUpdate = false;
+                    records.forEach(r => {
+                        if (r.deleted === undefined) { r.deleted = false; needUpdate = true; }
+                        if (r.updatedAt === undefined) { r.updatedAt = r.timestamp || Date.now(); needUpdate = true; }
+                    });
+                    if (needUpdate) {
+                        // 批量更新旧数据到数据库
+                        await db.putAll('records', records);
+                    }
 
                     const settingsData = loadedSettings.find(s => s.key === STORAGE_KEYS.SETTINGS);
                     if (settingsData) settings = { ...settings, ...settingsData.value };
@@ -1086,16 +1110,30 @@
             }
 
             async function saveRecord(record) {
+                // 确保有 updatedAt 和 deleted 字段
+                if (!record.updatedAt) record.updatedAt = Date.now();
+                if (record.deleted === undefined) record.deleted = false;
                 await db.put('records', record);
-                records.push(record);
+                // 如果已存在则更新，否则添加
+                const index = records.findIndex(r => r.id === record.id);
+                if (index !== -1) records[index] = record;
+                else records.push(record);
             }
 
-            // 修改删除记录函数 - 删除后自动同步
+            // ✅ 第2步：软删除
             async function deleteRecord(id) {
-                await db.delete('records', id);
-                records = records.filter(r => r.id !== id);
-                
-                // 如果启用了 GitHub 同步，自动同步删除操作
+                const record = records.find(r => r.id === id);
+                if (!record) return;
+
+                record.deleted = true;
+                record.updatedAt = Date.now();
+
+                await db.put('records', record);
+
+                // 更新内存
+                const index = records.findIndex(r => r.id === id);
+                if (index !== -1) records[index] = record;
+
                 if (githubConfig.enabled && isOnline) {
                     await syncWithGitHub();
                 }
@@ -1117,15 +1155,17 @@
 
             function getTruckMonthStats(truckId) {
                 const currentMonth = getCurrentMonth();
-                const monthRecords = records.filter(r => r.truckId === truckId && r.date.startsWith(currentMonth));
+                const activeRecords = getActiveRecords();
+                const monthRecords = activeRecords.filter(r => r.truckId === truckId && r.date.startsWith(currentMonth));
                 const total = monthRecords.reduce((sum, r) => sum + r.amount, 0);
                 return { total, count: monthRecords.length };
             }
 
             function getAllTruckStats() {
                 const currentMonth = getCurrentMonth();
+                const activeRecords = getActiveRecords();
                 return trucks.map(truck => {
-                    const monthRecords = records.filter(r => r.truckId === truck.id && r.date.startsWith(currentMonth));
+                    const monthRecords = activeRecords.filter(r => r.truckId === truck.id && r.date.startsWith(currentMonth));
                     const total = monthRecords.reduce((sum, r) => sum + r.amount, 0);
                     return { truck, total, count: monthRecords.length };
                 });
@@ -1198,7 +1238,8 @@
 
             function renderRecentRecords() {
                 const list = document.getElementById('recordsList');
-                const recentRecords = [...records].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+                const activeRecords = getActiveRecords();
+                const recentRecords = [...activeRecords].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
 
                 if (recentRecords.length === 0) {
                     list.innerHTML = `<li class="empty-state">No records yet<br><small>Record your first diesel fill-up</small></li>`;
@@ -1223,7 +1264,7 @@
                     li.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const recordId = li.dataset.recordId;
-                        const record = records.find(r => r.id === recordId);
+                        const record = records.find(r => r.id === recordId && !r.deleted);
                         if (record) {
                             showRecordActionMenu(record, li);
                         }
@@ -1269,7 +1310,6 @@
                     showEditRecordModal(record);
                 });
 
-                // 修改删除逻辑 - 使用新的 deleteRecord 函数
                 menu.querySelector('[data-action="delete"]').addEventListener('click', async () => {
                     menu.remove();
                     currentRecordMenu = null;
@@ -1374,7 +1414,7 @@
                     finalData.meta = {
                         version: '1.0',
                         lastUpdated: new Date().toISOString(),
-                        totalRecords: finalData.records.length
+                        totalRecords: finalData.records.filter(r => !r.deleted).length
                     };
 
                     const content = btoa(unescape(encodeURIComponent(JSON.stringify(finalData, null, 2))));
@@ -1396,6 +1436,8 @@
                     trucks = finalData.trucks;
                     records = finalData.records;
                     await saveTrucks();
+                    
+                    // 清除旧记录并重新写入所有记录（包括软删除的）
                     await db.clear('records');
                     await db.putAll('records', records);
 
@@ -1413,6 +1455,7 @@
                 }
             }
 
+            // ✅ 第4步：基于 updatedAt 合并
             function mergeData(local, remote) {
                 const mergedTrucks = [...local.trucks];
                 remote.trucks.forEach(rt => {
@@ -1422,9 +1465,14 @@
                 });
 
                 const recordMap = new Map();
+                // 先处理本地
                 [...local.records, ...remote.records].forEach(r => {
+                    // 兼容旧数据
+                    if (r.deleted === undefined) r.deleted = false;
+                    if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+                    
                     const existing = recordMap.get(r.id);
-                    if (!existing || r.timestamp > existing.timestamp) {
+                    if (!existing || r.updatedAt > existing.updatedAt) {
                         recordMap.set(r.id, r);
                     }
                 });
@@ -1624,23 +1672,23 @@
                         if (t) { modal.remove(); showEditTruckModal(t); }
                     };
                 });
-                // 修改删除卡车逻辑
                 modal.querySelectorAll('.delete-truck').forEach(b => {
                     b.onclick = async () => {
                         if (confirm('Delete this truck and all its records?')) {
                             const truckId = b.dataset.id;
                             trucks = trucks.filter(t => t.id !== truckId);
                             
-                            // 删除该卡车的所有记录
-                            const recordsToDelete = records.filter(r => r.truckId === truckId);
-                            for (const r of recordsToDelete) {
-                                await db.delete('records', r.id);
+                            // 软删除该卡车的所有记录
+                            for (const r of records.filter(r => r.truckId === truckId)) {
+                                r.deleted = true;
+                                r.updatedAt = Date.now();
+                                await db.put('records', r);
                             }
-                            records = records.filter(r => r.truckId !== truckId);
+                            // 更新内存
+                            records.forEach(r => { if (r.truckId === truckId) r.deleted = true; });
                             
                             await saveTrucks();
                             
-                            // 同步到 GitHub
                             if (githubConfig.enabled && isOnline) {
                                 await syncWithGitHub();
                             }
@@ -1686,7 +1734,8 @@
 
             function showTruckRecordsModal(truck) {
                 const currentMonth = getCurrentMonth();
-                const truckRecords = records.filter(r => r.truckId === truck.id && r.date.startsWith(currentMonth))
+                const activeRecords = getActiveRecords();
+                const truckRecords = activeRecords.filter(r => r.truckId === truck.id && r.date.startsWith(currentMonth))
                     .sort((a, b) => b.timestamp - a.timestamp);
                 const total = truckRecords.reduce((sum, r) => sum + r.amount, 0);
                 const remaining = truck.budget - total;
@@ -1726,11 +1775,10 @@
                 `);
                 modal.querySelectorAll('.edit-record').forEach(btn => {
                     btn.onclick = () => {
-                        const r = records.find(rec => rec.id === btn.dataset.id);
+                        const r = records.find(rec => rec.id === btn.dataset.id && !rec.deleted);
                         if (r) { modal.remove(); showEditRecordModal(r); }
                     };
                 });
-                // 修改删除逻辑
                 modal.querySelectorAll('.delete-record').forEach(btn => {
                     btn.onclick = async () => {
                         if (confirm('Delete this record?')) {
@@ -1771,6 +1819,7 @@
                     record.timestamp = newDateTime.getTime();
                     record.date = formatDate(newDateTime);
                     record.time = formatTime(newDateTime);
+                    record.updatedAt = Date.now(); // ✅ 更新 updatedAt
                     await db.put('records', record);
                     const index = records.findIndex(r => r.id === record.id);
                     if (index !== -1) records[index] = record;
@@ -1787,12 +1836,13 @@
 
                 const renderFilteredRecords = () => {
                     const container = document.getElementById('filteredRecordsContainer');
-                    let filtered = [...records];
+                    const activeRecords = getActiveRecords();
+                    let filtered = [...activeRecords];
                     if (selectedFilterTruck !== 'all') filtered = filtered.filter(r => r.truckId === selectedFilterTruck);
                     if (selectedFilterMonth !== 'all') filtered = filtered.filter(r => r.date.startsWith(selectedFilterMonth));
                     filtered.sort((a, b) => b.timestamp - a.timestamp);
                     const total = filtered.reduce((sum, r) => sum + r.amount, 0);
-                    const months = [...new Set(records.map(r => r.date.slice(0, 7)))].sort().reverse();
+                    const months = [...new Set(activeRecords.map(r => r.date.slice(0, 7)))].sort().reverse();
 
                     let html = `
                         <div class="filter-section">
@@ -1842,11 +1892,10 @@
                     container.querySelector('#filterMonth').onchange = (e) => { selectedFilterMonth = e.target.value; renderFilteredRecords(); };
                     container.querySelectorAll('.edit-record').forEach(btn => {
                         btn.onclick = () => {
-                            const r = records.find(rec => rec.id === btn.dataset.id);
+                            const r = records.find(rec => rec.id === btn.dataset.id && !rec.deleted);
                             if (r) { modal.remove(); showEditRecordModal(r); }
                         };
                     });
-                    // 修改删除逻辑
                     container.querySelectorAll('.delete-record').forEach(btn => {
                         btn.onclick = async () => {
                             if (confirm('Delete this record?')) {
@@ -1868,7 +1917,8 @@
 
             function showExportNoteModal() {
                 const currentMonth = getCurrentMonth();
-                const monthRecords = records.filter(r => r.date.startsWith(currentMonth))
+                const activeRecords = getActiveRecords();
+                const monthRecords = activeRecords.filter(r => r.date.startsWith(currentMonth))
                     .sort((a, b) => a.truckId.localeCompare(b.truckId) || b.timestamp - a.timestamp);
 
                 let note = `Diesel Records - ${currentMonth}\n${'='.repeat(30)}\n\n`;
@@ -1910,10 +1960,11 @@
             }
 
             function showExportBackupModal() {
+                const activeRecords = getActiveRecords();
                 const data = {
-                    meta: { version: '1.0', exportDate: new Date().toISOString(), totalRecords: records.length },
+                    meta: { version: '2.0', exportDate: new Date().toISOString(), totalRecords: activeRecords.length },
                     trucks,
-                    records
+                    records: records // 包含软删除记录，方便恢复
                 };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a');
@@ -1921,7 +1972,7 @@
                 a.download = `diesel-backup-${formatDate(new Date())}.json`;
                 a.click();
                 URL.revokeObjectURL(a.href);
-                showToast(`✅ Exported ${records.length} records`);
+                showToast(`✅ Exported ${activeRecords.length} records`);
             }
 
             async function showClearDataModal() {
@@ -1977,7 +2028,9 @@
                     date: formatDate(now),
                     time: formatTime(now),
                     amount: amount,
-                    timestamp: now.getTime()
+                    timestamp: now.getTime(),
+                    updatedAt: Date.now(), // ✅ 第1步
+                    deleted: false          // ✅ 第1步
                 };
                 await saveRecord(record);
                 amountInput.value = '';
@@ -2067,7 +2120,7 @@
                 window.addEventListener('online', () => { isOnline = true; updateConnectionStatus(); showToast('📶 Back online'); });
                 window.addEventListener('offline', () => { isOnline = false; updateConnectionStatus(); showToast('📴 Offline mode'); });
 
-                // Auto-sync - 只在没有最近同步的情况下自动同步
+                // Auto-sync
                 if (githubConfig.enabled && isOnline) {
                     setTimeout(() => {
                         if (!githubConfig.lastSync || (Date.now() - githubConfig.lastSync) > 60000) {
