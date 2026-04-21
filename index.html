@@ -1418,12 +1418,13 @@ async function syncWithGitHub() {
 
         let finalData;
         if (remoteData) {
-            // 合并数据
-            finalData = mergeData(
+            // 合并数据 - 远程数据优先
+            finalData = mergeDataWithRemotePriority(
                 { trucks, records },
                 { trucks: remoteData.trucks || [], records: remoteData.records || [] }
             );
         } else {
+            // 远程没有数据，使用本地数据
             finalData = { trucks, records };
         }
 
@@ -1486,48 +1487,74 @@ async function syncWithGitHub() {
     }
 }
 
-// ✅ 第4步：基于 updatedAt 合并（已修复）
-function mergeData(local, remote) {
-    // 合并 trucks
-    const mergedTrucks = [...local.trucks];
-    remote.trucks.forEach(rt => {
-        const existingIndex = mergedTrucks.findIndex(lt => lt.id === rt.id);
+// ✅ 新的合并函数 - 远程数据优先
+function mergeDataWithRemotePriority(local, remote) {
+    // 合并 trucks - 远程优先，但保留本地的预算等设置
+    const mergedTrucks = [...remote.trucks];
+    local.trucks.forEach(lt => {
+        const existingIndex = mergedTrucks.findIndex(rt => rt.id === lt.id);
         if (existingIndex === -1) {
-            mergedTrucks.push(rt);
+            // 远程没有，添加本地卡车
+            mergedTrucks.push(lt);
+        } else {
+            // 远程有，但保留本地的一些设置（如预算）
+            const remoteTruck = mergedTrucks[existingIndex];
+            mergedTrucks[existingIndex] = {
+                ...remoteTruck,
+                budget: lt.budget || remoteTruck.budget,  // 优先使用本地预算
+                color: lt.color || remoteTruck.color       // 优先使用本地颜色
+            };
         }
-        // 注意：这里不处理 truck 的更新冲突，简单保留本地的
     });
 
-    // 合并 records - 使用 updatedAt 作为版本控制
+    // 合并 records - 基于远程数据，但比较 updatedAt
     const recordMap = new Map();
     
-    // 处理本地记录
-    local.records.forEach(r => {
-        // 确保有必要的字段
+    // 首先，将远程所有记录加入 Map（这是基础）
+    remote.records.forEach(r => {
         if (r.deleted === undefined) r.deleted = false;
         if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
         recordMap.set(r.id, r);
     });
     
-    // 处理远程记录
-    remote.records.forEach(r => {
+    // 然后处理本地记录
+    local.records.forEach(localRecord => {
         // 确保有必要的字段
-        if (r.deleted === undefined) r.deleted = false;
-        if (r.updatedAt === undefined) r.updatedAt = r.timestamp || Date.now();
+        if (localRecord.deleted === undefined) localRecord.deleted = false;
+        if (localRecord.updatedAt === undefined) localRecord.updatedAt = localRecord.timestamp || Date.now();
         
-        const existing = recordMap.get(r.id);
-        if (!existing) {
-            // 本地没有，直接添加
-            recordMap.set(r.id, r);
-        } else {
-            // 本地有，比较 updatedAt，保留更新的版本
-            if (r.updatedAt > existing.updatedAt) {
-                recordMap.set(r.id, r);
-                console.log(`Record ${r.id} updated from remote (remote: ${r.updatedAt} > local: ${existing.updatedAt})`);
-            } else if (r.updatedAt < existing.updatedAt) {
-                console.log(`Record ${r.id} kept local version (local: ${existing.updatedAt} > remote: ${r.updatedAt})`);
+        const remoteRecord = recordMap.get(localRecord.id);
+        
+        if (!remoteRecord) {
+            // 远程没有这条记录
+            // 检查本地记录是否应该被保留
+            if (!localRecord.deleted) {
+                // 如果是未删除的记录，检查创建时间
+                const isRecent = (Date.now() - localRecord.timestamp) < 300000; // 5分钟内创建的
+                if (isRecent) {
+                    // 最近创建的记录，保留
+                    recordMap.set(localRecord.id, localRecord);
+                    console.log(`Keeping recent local record: ${localRecord.id}`);
+                } else {
+                    // 旧记录，但远程没有，说明在远程被删除了，标记为删除
+                    localRecord.deleted = true;
+                    localRecord.updatedAt = Date.now();
+                    recordMap.set(localRecord.id, localRecord);
+                    console.log(`Marking local record as deleted (not in remote): ${localRecord.id}`);
+                }
             } else {
-                console.log(`Record ${r.id} has same timestamp, kept existing`);
+                // 本地已删除的记录，但远程没有，保留删除状态
+                recordMap.set(localRecord.id, localRecord);
+            }
+        } else {
+            // 远程有这条记录，比较 updatedAt
+            if (localRecord.updatedAt > remoteRecord.updatedAt) {
+                // 本地更新，使用本地版本
+                recordMap.set(localRecord.id, localRecord);
+                console.log(`Using local version (newer): ${localRecord.id}`);
+            } else {
+                // 远程更新或相同，使用远程版本
+                console.log(`Using remote version: ${localRecord.id}`);
             }
         }
     });
