@@ -888,7 +888,7 @@
             let settings = { userName: 'Driver' };
             let githubConfig = {
                 owner: 'company-record',
-                repo: 'diesel-record',
+                repo: 'lorry-diesel',
                 path: 'diesel-data.json',
                 token: '',
                 enabled: false,
@@ -1534,7 +1534,7 @@
                     </div>
                     <div class="settings-item">
                         <label class="settings-label">Repository</label>
-                        <input type="text" id="githubRepo" class="settings-input" value="${escapeHtml(githubConfig.repo)}" placeholder="e.g., diesel-record">
+                        <input type="text" id="githubRepo" class="settings-input" value="${escapeHtml(githubConfig.repo)}" placeholder="e.g., lorry-diesel">
                     </div>
                     <div class="settings-item">
                         <label class="settings-label">File Path</label>
@@ -2071,7 +2071,7 @@
 
                 document.getElementById('installApkBtn').addEventListener('click', () => {
                     document.getElementById('menuDropdown').classList.remove('show');
-                    window.location.href = 'https://company-record.github.io/diesel-record/Diesel_Record.apk';
+                    window.location.href = 'https://company-record.github.io/lorry-diesel/Diesel_Record.apk';
                     showToast('📲 Downloading APK...');
                 });
 
