@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Diesel Log</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- Theme Color - 固定明亮主题 -->
+    <meta name="theme-color" content="#c2413a">
+    
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Diesel Log">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding: 12px 10px;
+            display: flex;
+            justify-content: center;
+            font-size: 16px;
+            background: #f1f5f9;
+            min-height: 100vh;
+        }
+
+        :root {
+            --card-radius: 20px;
+            --card-padding: 16px;
+            --expense-color: #c2413a;
+            --success-color: #10b981;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --border-light: rgba(0, 0, 0, 0.1);
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --warning-color: #ef4444;
+        }
+
+        .container {
+            max-width: 500px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .app-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sync-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 6px 12px;
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--border-light);
+        }
+
+        .sync-indicator.synced { color: var(--success-color); }
+        .sync-indicator.syncing { color: #f59e0b; }
+        .sync-indicator.unsynced { color: var(--warning-color); }
+
+        /* Truck Cards */
+        .trucks-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .truck-card {
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            padding: 14px 10px;
+            border: 1px solid var(--border-light);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        }
+
+        .truck-card:active {
+            transform: scale(0.98);
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .truck-plate {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .truck-plate .edit-icon {
+            font-size: 12px;
+            opacity: 0.5;
+        }
+
+        .truck-amount {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--success-color);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.warning {
+            background: #f59e0b;
+        }
+
+        .progress-fill.over-budget {
+            background: var(--warning-color);
+        }
+
+        .truck-remaining {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .truck-remaining.positive { color: var(--success-color); }
+        .truck-remaining.negative { color: var(--warning-color); }
+
+        .truck-card.over-budget {
+            border-color: var(--warning-color);
+        }
+
+        /* Input Card */
+        .input-card {
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            padding: var(--card-padding);
+            border: 1px solid var(--border-light);
+            margin-bottom: 12px;
+        }
+
+        .date-display {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .truck-selector {
+            flex: 1;
+            position: relative;
+            min-width: 0;
+        }
+
+        .amount-input-wrapper {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.04);
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            border: 1px solid var(--border-light);
+            min-width: 0;
+        }
+
+        .truck-select-trigger {
+            background: rgba(0, 0, 0, 0.04);
+            border-radius: 40px;
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid var(--border-light);
+            font-size: 15px;
+            color: var(--text-primary);
+            width: 100%;
+        }
+
+        .truck-select-trigger .arrow {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .truck-dropdown {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0;
+            right: 0;
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+            display: none;
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--border-light);
+        }
+
+        .truck-dropdown.show {
+            display: block;
+        }
+
+        .truck-option {
+            padding: 14px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-light);
+            color: var(--text-primary);
+            font-size: 15px;
+        }
+
+        .truck-option:last-child {
+            border-bottom: none;
+        }
+
+        .truck-option:active {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .amount-input-wrapper span {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-right: 6px;
+        }
+
+        .amount-input-wrapper input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 14px 0;
+            outline: none;
+            font-size: 16px;
+            color: var(--text-primary);
+            width: 100%;
+        }
+
+        .amount-input-wrapper input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .record-btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 40px;
+            background: var(--expense-color);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .record-btn:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+
+        /* Recent Records */
+        .recent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 0 4px;
+        }
+
+        .recent-header h4 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .view-all-btn {
+            background: none;
+            border: none;
+            color: var(--expense-color);
+            font-size: 14px;
+            cursor: pointer;
+            padding: 8px 12px;
+        }
+
+        .records-list {
+            list-style: none;
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+        }
+
+        .records-list li {
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-light);
+            cursor: pointer;
+            transition: background 0.1s;
+            position: relative;
+        }
+
+        .records-list li:last-child {
+            border-bottom: none;
+        }
+
+        .records-list li:active {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .record-info {
+            flex: 1;
+        }
+
+        .record-plate {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .record-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .record-amount {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--expense-color);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        /* Menu */
+        .menu-container {
+            position: relative;
+        }
+
+        .menu-btn {
+            width: 44px;
+            height: 44px;
+            background: var(--card-bg);
+            border-radius: 50%;
+            border: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+
+        .menu-dropdown {
+            position: absolute;
+            top: 52px;
+            right: 0;
+            background: var(--card-bg);
+            border-radius: 16px;
+            width: 240px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            display: none;
+            z-index: 200;
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid var(--border-light);
+        }
+
+        .menu-dropdown.show {
+            display: block;
+        }
+
+        .menu-item {
+            padding: 14px 18px;
+            font-size: 15px;
+            border-bottom: 1px solid var(--border-light);
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .menu-item:active {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .menu-item.danger {
+            color: var(--warning-color);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border-radius: 24px;
+            width: 90%;
+            max-width: 380px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.2s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            color: var(--text-secondary);
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 20px;
+        }
+
+        .modal-footer {
+            padding: 14px 20px;
+            border-top: 1px solid var(--border-light);
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 40px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--expense-color);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: rgba(0, 0, 0, 0.06);
+            color: var(--text-primary);
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1100;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: #1e293b;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-size: 14px;
+            animation: fadeInOut 2s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-weight: 500;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(10px); }
+            15% { opacity: 1; transform: translateY(0); }
+            85% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+
+        /* Settings */
+        .settings-item {
+            margin-bottom: 20px;
+        }
+
+        .settings-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .settings-input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid var(--border-light);
+            background: var(--card-bg);
+            color: var(--text-primary);
+            font-size: 15px;
+            outline: none;
+        }
+
+        .settings-input:focus {
+            border-color: var(--expense-color);
+        }
+
+        /* Record Actions Menu */
+        .record-action-menu {
+            position: fixed;
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            z-index: 300;
+            min-width: 120px;
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            animation: menuFadeIn 0.15s ease;
+        }
+
+        @keyframes menuFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .record-action-item {
+            padding: 14px 18px;
+            cursor: pointer;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-light);
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.1s;
+        }
+
+        .record-action-item:last-child {
+            border-bottom: none;
+        }
+
+        .record-action-item:active {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .record-action-item.delete {
+            color: var(--warning-color);
+        }
+
+        /* Filter section */
+        .filter-section {
+            margin-bottom: 16px;
+        }
+
+        .filter-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .record-item-detail {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .record-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .record-plate-large {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+
+        .record-amount-large {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--expense-color);
+        }
+
+        .record-datetime {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .record-actions {
+            display: flex;
+            gap: 16px;
+        }
+
+        .record-actions span {
+            cursor: pointer;
+            opacity: 0.6;
+            font-size: 16px;
+        }
+
+        .record-actions span:active {
+            opacity: 1;
+        }
+
+        /* Connection status */
+        .offline-badge {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning-color);
+            margin-left: 6px;
+        }
+
+        .offline-badge.online {
+            background: var(--success-color);
+        }
+
+        /* Install Guide */
+        .install-guide {
+            text-align: center;
+            padding: 10px 0;
+        }
+
+        .install-step {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.04);
+            border-radius: 16px;
+            margin-bottom: 12px;
+        }
+
+        .step-number {
+            width: 36px;
+            height: 36px;
+            background: var(--expense-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+            text-align: left;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .step-content strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .platform-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .platform-tab {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 40px;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .platform-tab.active {
+            background: var(--expense-color);
+            color: white;
+            border-color: var(--expense-color);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="app-header">
+            <div class="app-title">
+                ⛽ Diesel Log
+                <span id="connectionStatus" class="offline-badge" title="Connection status"></span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <div class="sync-indicator" id="syncIndicator">
+                    <span id="syncIcon">💾</span>
+                    <span id="syncText">Local</span>
+                </div>
+                <div class="menu-container">
+                    <button class="menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+                    <div class="menu-dropdown" id="menuDropdown">
+                        <div class="menu-item" id="installGuideBtn">📱 Add to Home Screen</div>
+                        <div class="menu-item" id="installApkBtn">📲 Install APK</div>
+                        <div class="menu-item" id="githubSyncBtn">🔐 GitHub Sync</div>
+                        <div class="menu-item" id="exportNoteBtn">📄 Export Note</div>
+                        <div class="menu-item" id="manageTrucksBtn">🚛 Manage Trucks</div>
+                        <div class="menu-item" id="viewAllRecordsBtn">📊 View All Records</div>
+                        <div class="menu-item" id="exportBackupBtn">📤 Export Backup</div>
+                        <div class="menu-item" id="importBackupBtn">📥 Import Backup</div>
+                        <div class="menu-item danger" id="clearDataBtn">🗑 Clear All Data</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Truck Cards -->
+        <div class="trucks-grid" id="trucksGrid"></div>
+
+        <!-- Input Card -->
+        <div class="input-card">
+            <div class="date-display" id="dateDisplay"></div>
+            <div class="input-row">
+                <div class="truck-selector">
+                    <div class="truck-select-trigger" id="truckSelectTrigger">
+                        <span id="selectedTruckText">Select Vehicle</span>
+                        <span class="arrow">▼</span>
+                    </div>
+                    <div class="truck-dropdown" id="truckDropdown"></div>
+                </div>
+                <div class="amount-input-wrapper">
+                    <span>S$</span>
+                    <input type="text" id="amountInput" placeholder="0.00" inputmode="decimal">
+                </div>
+            </div>
+            <button class="record-btn" id="recordBtn">⛽ Record Diesel</button>
+        </div>
+
+        <!-- Recent Records -->
+        <div class="recent-header">
+            <h4>📋 Recent Records</h4>
+            <button class="view-all-btn" id="viewAllBtn">View All →</button>
+        </div>
+        <ul class="records-list" id="recordsList"></ul>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <template id="modalTemplate">
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title"></h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body"></div>
+                <div class="modal-footer"></div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // ==================== Service Worker Registration ====================
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((reg) => console.log('✅ Service Worker registered'))
+                    .catch((err) => console.log('Service Worker failed:', err));
+            }
+
+            // ==================== Constants ====================
+            const STORAGE_KEYS = {
+                TRUCKS: 'diesel_trucks_v1',
+                RECORDS: 'diesel_records_v1',
+                SETTINGS: 'diesel_settings_v1',
+                GITHUB: 'diesel_github_v1'
+            };
+
+            const DEFAULT_TRUCKS = [
+                { id: 'truck_001', plateNumber: 'GBH 218Z', budget: 650, color: '#c2413a' },
+                { id: 'truck_002', plateNumber: 'YR 1868R', budget: 650, color: '#3b82f6' },
+                { id: 'truck_003', plateNumber: 'YR 1859S', budget: 650, color: '#10b981' },
+                { id: 'truck_004', plateNumber: 'YR 2284T', budget: 650, color: '#f59e0b' }
+            ];
+
+            // ==================== State ====================
+            let trucks = [];
+            let records = [];
+            let settings = { userName: 'Driver' };
+            let githubConfig = {
+                owner: 'company-record',
+                repo: 'diesel-record',
+                path: 'diesel-data.json',
+                token: '',
+                enabled: false,
+                lastSync: null
+            };
+
+            let selectedTruckId = null;
+            let isSyncing = false;
+            let currentRecordMenu = null;
+            let isOnline = navigator.onLine;
+
+            // ==================== Database ====================
+            class DB {
+                constructor() {
+                    this.dbName = 'DieselLogDB';
+                    this.version = 2;
+                    this.db = null;
+                }
+
+                async open() {
+                    if (this.db) return this.db;
+                    return new Promise((resolve, reject) => {
+                        const request = indexedDB.open(this.dbName, this.version);
+                        request.onerror = () => reject(request.error);
+                        request.onsuccess = () => { this.db = request.result; resolve(this.db); };
+                        request.onupgradeneeded = (e) => {
+                            const db = e.target.result;
+                            if (!db.objectStoreNames.contains('records')) {
+                                const recordsStore = db.createObjectStore('records', { keyPath: 'id' });
+                                recordsStore.createIndex('truckId', 'truckId', { unique: false });
+                                recordsStore.createIndex('timestamp', 'timestamp', { unique: false });
+                                recordsStore.createIndex('date', 'date', { unique: false });
+                            }
+                            if (!db.objectStoreNames.contains('settings')) {
+                                db.createObjectStore('settings', { keyPath: 'key' });
+                            }
+                        };
+                    });
+                }
+
+                async getAll(storeName) {
+                    const db = await this.open();
+                    return new Promise((resolve, reject) => {
+                        const tx = db.transaction(storeName, 'readonly');
+                        const store = tx.objectStore(storeName);
+                        const request = store.getAll();
+                        request.onerror = () => reject(request.error);
+                        request.onsuccess = () => resolve(request.result);
+                    });
+                }
+
+                async put(storeName, item) {
+                    const db = await this.open();
+                    return new Promise((resolve, reject) => {
+                        const tx = db.transaction(storeName, 'readwrite');
+                        const store = tx.objectStore(storeName);
+                        const request = store.put(item);
+                        request.onerror = () => reject(request.error);
+                        request.onsuccess = () => resolve(request.result);
+                    });
+                }
+
+                async putAll(storeName, items) {
+                    const db = await this.open();
+                    return new Promise((resolve) => {
+                        if (!items.length) { resolve({ success: 0, failed: 0 }); return; }
+                        const tx = db.transaction(storeName, 'readwrite');
+                        const store = tx.objectStore(storeName);
+                        let success = 0, failed = 0;
+                        tx.oncomplete = () => resolve({ success, failed });
+                        items.forEach(item => {
+                            const req = store.put(item);
+                            req.onsuccess = () => success++;
+                            req.onerror = () => failed++;
+                        });
+                    });
+                }
+
+                async delete(storeName, key) {
+                    const db = await this.open();
+                    return new Promise((resolve, reject) => {
+                        const tx = db.transaction(storeName, 'readwrite');
+                        const store = tx.objectStore(storeName);
+                        const request = store.delete(key);
+                        request.onerror = () => reject(request.error);
+                        request.onsuccess = () => resolve();
+                    });
+                }
+
+                async clear(storeName) {
+                    const db = await this.open();
+                    return new Promise((resolve, reject) => {
+                        const tx = db.transaction(storeName, 'readwrite');
+                        const store = tx.objectStore(storeName);
+                        const request = store.clear();
+                        request.onerror = () => reject(request.error);
+                        request.onsuccess = () => resolve();
+                    });
+                }
+            }
+
+            const db = new DB();
+
+            // ==================== Utility Functions ====================
+            function generateId() {
+                return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            }
+
+            function formatDate(date) {
+                const d = new Date(date);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+
+            function formatTime(date) {
+                const d = new Date(date);
+                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            }
+
+            function formatDateTime(date) {
+                const d = new Date(date);
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${formatTime(date)}`;
+            }
+
+            function formatRelativeTime(timestamp) {
+                const now = Date.now();
+                const diff = now - timestamp;
+                const minutes = Math.floor(diff / 60000);
+                const hours = Math.floor(diff / 3600000);
+                const days = Math.floor(diff / 86400000);
+
+                if (minutes < 1) return 'Just now';
+                if (minutes < 60) return `${minutes} min ago`;
+                if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+                if (days === 1) return 'Yesterday';
+                if (days < 7) return `${days} days ago`;
+                return formatDateTime(timestamp);
+            }
+
+            function showToast(message, duration = 2000) {
+                const container = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.textContent = message;
+                container.appendChild(toast);
+                setTimeout(() => toast.remove(), duration);
+            }
+
+            function escapeHtml(str) {
+                if (!str) return '';
+                return String(str).replace(/[&<>"']/g, function(m) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+                });
+            }
+
+            function updateConnectionStatus() {
+                const statusEl = document.getElementById('connectionStatus');
+                if (statusEl) {
+                    statusEl.className = isOnline ? 'offline-badge online' : 'offline-badge';
+                    statusEl.title = isOnline ? 'Online' : 'Offline - Changes saved locally';
+                }
+            }
+
+            function detectPlatform() {
+                const ua = navigator.userAgent;
+                if (/iPad|iPhone|iPod/.test(ua)) return 'ios';
+                if (/Android/.test(ua)) return 'android';
+                return 'other';
+            }
+
+            // ==================== Data Management ====================
+            async function loadData() {
+                try {
+                    const loadedSettings = await db.getAll('settings');
+                    const trucksData = loadedSettings.find(s => s.key === STORAGE_KEYS.TRUCKS);
+                    if (trucksData) trucks = trucksData.value;
+                    else trucks = [...DEFAULT_TRUCKS];
+
+                    records = await db.getAll('records');
+
+                    const settingsData = loadedSettings.find(s => s.key === STORAGE_KEYS.SETTINGS);
+                    if (settingsData) settings = { ...settings, ...settingsData.value };
+
+                    const githubData = loadedSettings.find(s => s.key === STORAGE_KEYS.GITHUB);
+                    if (githubData) githubConfig = { ...githubConfig, ...githubData.value };
+
+                    // 不自动选择卡车，让用户手动选择
+                    // selectedTruckId 保持为 null
+                } catch (e) {
+                    console.error('Load failed:', e);
+                    trucks = [...DEFAULT_TRUCKS];
+                    records = [];
+                }
+            }
+
+            async function saveTrucks() {
+                await db.put('settings', { key: STORAGE_KEYS.TRUCKS, value: trucks });
+            }
+
+            async function saveRecord(record) {
+                await db.put('records', record);
+                records.push(record);
+            }
+
+            async function deleteRecord(id) {
+                await db.delete('records', id);
+                records = records.filter(r => r.id !== id);
+            }
+
+            async function saveSettings() {
+                await db.put('settings', { key: STORAGE_KEYS.SETTINGS, value: settings });
+            }
+
+            async function saveGithubConfig() {
+                await db.put('settings', { key: STORAGE_KEYS.GITHUB, value: githubConfig });
+            }
+
+            // ==================== Calculations ====================
+            function getCurrentMonth() {
+                const now = new Date();
+                return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            }
+
+            function getTruckMonthStats(truckId) {
+                const currentMonth = getCurrentMonth();
+                const monthRecords = records.filter(r => r.truckId === truckId && r.date.startsWith(currentMonth));
+                const total = monthRecords.reduce((sum, r) => sum + r.amount, 0);
+                return { total, count: monthRecords.length };
+            }
+
+            function getAllTruckStats() {
+                const currentMonth = getCurrentMonth();
+                return trucks.map(truck => {
+                    const monthRecords = records.filter(r => r.truckId === truck.id && r.date.startsWith(currentMonth));
+                    const total = monthRecords.reduce((sum, r) => sum + r.amount, 0);
+                    return { truck, total, count: monthRecords.length };
+                });
+            }
+
+            // ==================== Render Functions ====================
+            function renderTruckCards() {
+                const grid = document.getElementById('trucksGrid');
+                const stats = getAllTruckStats();
+
+                grid.innerHTML = stats.map(({ truck, total }) => {
+                    const budget = truck.budget || 650;
+                    const percentage = Math.min((total / budget) * 100, 100);
+                    const remaining = budget - total;
+                    const isOverBudget = total > budget;
+                    const progressClass = isOverBudget ? 'over-budget' : (percentage > 80 ? 'warning' : '');
+
+                    return `
+                        <div class="truck-card ${isOverBudget ? 'over-budget' : ''}" data-truck-id="${truck.id}">
+                            <div class="truck-plate">
+                                ${escapeHtml(truck.plateNumber)}
+                                <span class="edit-icon">✎</span>
+                            </div>
+                            <div class="truck-amount">S$${total.toFixed(2)} / S$${budget}</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${progressClass}" style="width: ${percentage}%"></div>
+                            </div>
+                            <div class="truck-remaining ${remaining >= 0 ? 'positive' : 'negative'}">
+                                ${remaining >= 0 ? `S$${remaining.toFixed(2)} left` : `⚠️ S$${Math.abs(remaining).toFixed(2)} over`}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                grid.querySelectorAll('.truck-card').forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        const truckId = card.dataset.truckId;
+                        const truck = trucks.find(t => t.id === truckId);
+                        if (truck) {
+                            if (e.target.closest('.edit-icon')) {
+                                showEditTruckModal(truck);
+                            } else {
+                                showTruckRecordsModal(truck);
+                            }
+                        }
+                    });
+                });
+            }
+
+            function renderInputSection() {
+                const now = new Date();
+                document.getElementById('dateDisplay').innerHTML = `📅 ${formatDateTime(now)}`;
+
+                const selectedTruck = trucks.find(t => t.id === selectedTruckId);
+                document.getElementById('selectedTruckText').textContent = selectedTruck ? selectedTruck.plateNumber : 'Select Vehicle';
+
+                const dropdown = document.getElementById('truckDropdown');
+                dropdown.innerHTML = trucks.map(t => `
+                    <div class="truck-option" data-truck-id="${t.id}">${escapeHtml(t.plateNumber)}</div>
+                `).join('');
+
+                dropdown.querySelectorAll('.truck-option').forEach(opt => {
+                    opt.addEventListener('click', () => {
+                        selectedTruckId = opt.dataset.truckId;
+                        renderInputSection();
+                        dropdown.classList.remove('show');
+                    });
+                });
+            }
+
+            function renderRecentRecords() {
+                const list = document.getElementById('recordsList');
+                const recentRecords = [...records].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+
+                if (recentRecords.length === 0) {
+                    list.innerHTML = `<li class="empty-state">No records yet<br><small>Record your first diesel fill-up</small></li>`;
+                    return;
+                }
+
+                list.innerHTML = recentRecords.map(r => {
+                    const truck = trucks.find(t => t.id === r.truckId);
+                    const plateNumber = truck ? truck.plateNumber : r.plateNumber || 'Unknown';
+                    return `
+                        <li data-record-id="${r.id}">
+                            <div class="record-info">
+                                <div class="record-plate">${escapeHtml(plateNumber)}</div>
+                                <div class="record-time">${formatRelativeTime(r.timestamp)}</div>
+                            </div>
+                            <div class="record-amount">S$${r.amount.toFixed(2)}</div>
+                        </li>
+                    `;
+                }).join('');
+
+                list.querySelectorAll('li').forEach(li => {
+                    li.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const recordId = li.dataset.recordId;
+                        const record = records.find(r => r.id === recordId);
+                        if (record) {
+                            showRecordActionMenu(record, li);
+                        }
+                    });
+                });
+            }
+
+            function showRecordActionMenu(record, targetElement) {
+                if (currentRecordMenu) {
+                    currentRecordMenu.remove();
+                    currentRecordMenu = null;
+                }
+
+                const menu = document.createElement('div');
+                menu.className = 'record-action-menu';
+                menu.innerHTML = `
+                    <div class="record-action-item" data-action="edit">
+                        <span>✏️</span> Edit
+                    </div>
+                    <div class="record-action-item delete" data-action="delete">
+                        <span>🗑️</span> Delete
+                    </div>
+                `;
+
+                const rect = targetElement.getBoundingClientRect();
+                const menuWidth = 120;
+                const menuHeight = 96;
+                
+                let top = rect.bottom + 5;
+                let left = rect.right - menuWidth;
+                
+                if (left < 10) left = 10;
+                if (top + menuHeight > window.innerHeight) {
+                    top = rect.top - menuHeight - 5;
+                }
+                
+                menu.style.top = `${top}px`;
+                menu.style.left = `${left}px`;
+
+                menu.querySelector('[data-action="edit"]').addEventListener('click', () => {
+                    menu.remove();
+                    currentRecordMenu = null;
+                    showEditRecordModal(record);
+                });
+
+                menu.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+                    menu.remove();
+                    currentRecordMenu = null;
+                    if (confirm(`Delete this record of S$${record.amount.toFixed(2)}?`)) {
+                        await deleteRecord(record.id);
+                        renderAll();
+                        showToast('Record deleted');
+                    }
+                });
+
+                document.body.appendChild(menu);
+                currentRecordMenu = menu;
+
+                const closeMenu = (e) => {
+                    if (!menu.contains(e.target) && e.target !== targetElement && !targetElement.contains(e.target)) {
+                        menu.remove();
+                        currentRecordMenu = null;
+                        document.removeEventListener('click', closeMenu);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', closeMenu), 10);
+            }
+
+            function renderAll() {
+                renderTruckCards();
+                renderInputSection();
+                renderRecentRecords();
+                updateSyncIndicator();
+            }
+
+            function updateSyncIndicator() {
+                const indicator = document.getElementById('syncIndicator');
+                const icon = document.getElementById('syncIcon');
+                const text = document.getElementById('syncText');
+
+                if (isSyncing) {
+                    indicator.className = 'sync-indicator syncing';
+                    icon.textContent = '🔄';
+                    text.textContent = 'Syncing...';
+                } else if (githubConfig.enabled && githubConfig.lastSync) {
+                    indicator.className = 'sync-indicator synced';
+                    icon.textContent = '✅';
+                    text.textContent = `Synced ${formatRelativeTime(githubConfig.lastSync)}`;
+                } else if (githubConfig.enabled) {
+                    indicator.className = 'sync-indicator unsynced';
+                    icon.textContent = '⚠️';
+                    text.textContent = 'Not synced';
+                } else {
+                    indicator.className = 'sync-indicator';
+                    icon.textContent = '💾';
+                    text.textContent = 'Local only';
+                }
+            }
+
+            // ==================== GitHub Sync ====================
+            async function syncWithGitHub() {
+                if (!isOnline) {
+                    showToast('📴 Offline - Cannot sync now');
+                    return;
+                }
+
+                if (!githubConfig.enabled || !githubConfig.owner || !githubConfig.repo || !githubConfig.token) {
+                    showToast('Please configure GitHub first');
+                    showGitHubConfigModal();
+                    return;
+                }
+
+                if (isSyncing) {
+                    showToast('Sync already in progress');
+                    return;
+                }
+
+                isSyncing = true;
+                updateSyncIndicator();
+
+                try {
+                    const url = `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/contents/${githubConfig.path}`;
+                    const response = await fetch(url, {
+                        headers: { 'Authorization': `token ${githubConfig.token}` }
+                    });
+
+                    let remoteData = null;
+                    let sha = null;
+
+                    if (response.ok) {
+                        const fileData = await response.json();
+                        sha = fileData.sha;
+                        const content = atob(fileData.content);
+                        remoteData = JSON.parse(content);
+                    }
+
+                    let finalData;
+                    if (remoteData) {
+                        finalData = mergeData(
+                            { trucks, records },
+                            { trucks: remoteData.trucks || [], records: remoteData.records || [] }
+                        );
+                    } else {
+                        finalData = { trucks, records };
+                    }
+
+                    finalData.meta = {
+                        version: '1.0',
+                        lastUpdated: new Date().toISOString(),
+                        lastUpdatedBy: settings.userName,
+                        totalRecords: finalData.records.length
+                    };
+
+                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(finalData, null, 2))));
+                    const putResponse = await fetch(url, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${githubConfig.token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Update diesel records - ${settings.userName}`,
+                            content: content,
+                            sha: sha
+                        })
+                    });
+
+                    if (!putResponse.ok) throw new Error('Failed to push data');
+
+                    trucks = finalData.trucks;
+                    records = finalData.records;
+                    await saveTrucks();
+                    await db.clear('records');
+                    await db.putAll('records', records);
+
+                    githubConfig.lastSync = Date.now();
+                    await saveGithubConfig();
+
+                    renderAll();
+                    showToast('✅ Sync successful');
+                } catch (error) {
+                    console.error('Sync failed:', error);
+                    showToast('❌ Sync failed: ' + error.message);
+                } finally {
+                    isSyncing = false;
+                    updateSyncIndicator();
+                }
+            }
+
+            function mergeData(local, remote) {
+                const mergedTrucks = [...local.trucks];
+                remote.trucks.forEach(rt => {
+                    if (!mergedTrucks.find(lt => lt.id === rt.id)) {
+                        mergedTrucks.push(rt);
+                    }
+                });
+
+                const recordMap = new Map();
+                [...local.records, ...remote.records].forEach(r => {
+                    const existing = recordMap.get(r.id);
+                    if (!existing || r.timestamp > existing.timestamp) {
+                        recordMap.set(r.id, r);
+                    }
+                });
+                const mergedRecords = Array.from(recordMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+                return { trucks: mergedTrucks, records: mergedRecords };
+            }
+
+            // ==================== Modal Functions ====================
+            function createModal(title, bodyHtml, footerHtml) {
+                const template = document.getElementById('modalTemplate');
+                const modal = template.content.cloneNode(true).firstElementChild;
+
+                modal.querySelector('.modal-title').textContent = title;
+                modal.querySelector('.modal-body').innerHTML = bodyHtml;
+
+                const footer = modal.querySelector('.modal-footer');
+                if (footerHtml) {
+                    footer.innerHTML = footerHtml;
+                } else {
+                    footer.style.display = 'none';
+                }
+
+                const closeBtn = modal.querySelector('.modal-close');
+                closeBtn.onclick = () => modal.remove();
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                document.body.appendChild(modal);
+                return modal;
+            }
+
+            function showInstallGuideModal() {
+                const platform = detectPlatform();
+                let html = `
+                    <div class="install-guide">
+                        <div class="platform-tabs">
+                            <div class="platform-tab ${platform === 'ios' ? 'active' : ''}" data-platform="ios">📱 iPhone/iPad</div>
+                            <div class="platform-tab ${platform === 'android' ? 'active' : ''}" data-platform="android">🤖 Android</div>
+                        </div>
+                        <div id="iosGuide" style="display: ${platform === 'ios' ? 'block' : 'none'};">
+                            <div class="install-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <strong>Tap Share button</strong>
+                                    <span style="opacity: 0.7;">📤 at the bottom of Safari</span>
+                                </div>
+                            </div>
+                            <div class="install-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <strong>Scroll and tap</strong>
+                                    <span style="opacity: 0.7;">"Add to Home Screen" ➕</span>
+                                </div>
+                            </div>
+                            <div class="install-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <strong>Tap "Add"</strong>
+                                    <span style="opacity: 0.7;">App will appear on home screen</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="androidGuide" style="display: ${platform === 'android' ? 'block' : 'none'};">
+                            <div class="install-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <strong>Tap menu ⋮</strong>
+                                    <span style="opacity: 0.7;">in Chrome (top right)</span>
+                                </div>
+                            </div>
+                            <div class="install-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <strong>Tap "Add to Home screen"</strong>
+                                    <span style="opacity: 0.7;">or "Install app"</span>
+                                </div>
+                            </div>
+                            <div class="install-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <strong>Tap "Install"</strong>
+                                    <span style="opacity: 0.7;">App will be added to home screen</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; padding: 12px; background: rgba(194, 65, 58, 0.1); border-radius: 12px; font-size: 13px; color: var(--text-secondary);">
+                            💡 <strong>Tip:</strong> Installing the app gives you a full-screen experience with faster access!
+                        </div>
+                    </div>
+                `;
+
+                const modal = createModal('📱 Add to Home Screen', html, `
+                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Got it</button>
+                `);
+
+                modal.querySelectorAll('.platform-tab').forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        modal.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+                        tab.classList.add('active');
+                        const platform = tab.dataset.platform;
+                        modal.querySelector('#iosGuide').style.display = platform === 'ios' ? 'block' : 'none';
+                        modal.querySelector('#androidGuide').style.display = platform === 'android' ? 'block' : 'none';
+                    });
+                });
+            }
+
+            function showGitHubConfigModal() {
+                const html = `
+                    <div class="settings-item">
+                        <label class="settings-label">GitHub Owner</label>
+                        <input type="text" id="githubOwner" class="settings-input" value="${escapeHtml(githubConfig.owner)}" placeholder="e.g., company-record">
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">Repository</label>
+                        <input type="text" id="githubRepo" class="settings-input" value="${escapeHtml(githubConfig.repo)}" placeholder="e.g., diesel-record">
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">File Path</label>
+                        <input type="text" id="githubPath" class="settings-input" value="${escapeHtml(githubConfig.path)}" placeholder="diesel-data.json">
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">Personal Access Token</label>
+                        <input type="password" id="githubToken" class="settings-input" value="${escapeHtml(githubConfig.token)}" placeholder="ghp_xxxxxxxxxxxx">
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">Token needs "repo" scope</div>
+                    </div>
+                `;
+                const modal = createModal('🔐 GitHub Sync', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="saveGithubBtn">Save & Sync</button>
+                `);
+                modal.querySelector('#saveGithubBtn').onclick = async () => {
+                    githubConfig.owner = modal.querySelector('#githubOwner').value.trim();
+                    githubConfig.repo = modal.querySelector('#githubRepo').value.trim();
+                    githubConfig.path = modal.querySelector('#githubPath').value.trim() || 'diesel-data.json';
+                    githubConfig.token = modal.querySelector('#githubToken').value.trim();
+                    githubConfig.enabled = !!(githubConfig.owner && githubConfig.repo && githubConfig.token);
+                    await saveGithubConfig();
+                    modal.remove();
+                    if (githubConfig.enabled) {
+                        showToast('GitHub configured, syncing...');
+                        await syncWithGitHub();
+                    } else {
+                        showToast('GitHub configuration saved');
+                    }
+                };
+            }
+
+            function showEditTruckModal(truck) {
+                const html = `
+                    <div class="settings-item">
+                        <label class="settings-label">Plate Number</label>
+                        <input type="text" id="editPlateNumber" class="settings-input" value="${escapeHtml(truck.plateNumber)}">
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">Monthly Budget (S$)</label>
+                        <input type="number" id="editBudget" class="settings-input" value="${truck.budget}" step="10" min="0">
+                    </div>
+                `;
+                const modal = createModal('✏️ Edit Truck', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="saveTruckBtn">Save</button>
+                `);
+                modal.querySelector('#saveTruckBtn').onclick = async () => {
+                    const newPlate = modal.querySelector('#editPlateNumber').value.trim();
+                    if (!newPlate) { showToast('Plate number required'); return; }
+                    truck.plateNumber = newPlate;
+                    truck.budget = parseFloat(modal.querySelector('#editBudget').value);
+                    await saveTrucks();
+                    modal.remove();
+                    renderAll();
+                    showToast('Truck updated');
+                };
+            }
+
+            function showManageTrucksModal() {
+                const html = `
+                    <div id="truckListContainer">
+                        ${trucks.map(t => `
+                            <div class="record-item-detail" style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 600;">${escapeHtml(t.plateNumber)}</div>
+                                    <div style="font-size: 13px; color: var(--text-secondary);">Budget: S$${t.budget}</div>
+                                </div>
+                                <div style="display: flex; gap: 12px;">
+                                    <span style="cursor: pointer;" class="edit-truck" data-id="${t.id}">✏️</span>
+                                    <span style="cursor: pointer; color: var(--warning-color);" class="delete-truck" data-id="${t.id}">🗑</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button class="btn btn-secondary" id="addTruckBtn" style="width: 100%; margin-top: 16px;">+ Add New Truck</button>
+                `;
+                const modal = createModal('🚛 Manage Trucks', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                `);
+                modal.querySelectorAll('.edit-truck').forEach(b => {
+                    b.onclick = () => {
+                        const t = trucks.find(tr => tr.id === b.dataset.id);
+                        if (t) { modal.remove(); showEditTruckModal(t); }
+                    };
+                });
+                modal.querySelectorAll('.delete-truck').forEach(b => {
+                    b.onclick = async () => {
+                        if (confirm('Delete this truck and all its records?')) {
+                            const truckId = b.dataset.id;
+                            trucks = trucks.filter(t => t.id !== truckId);
+                            records = records.filter(r => r.truckId !== truckId);
+                            await saveTrucks();
+                            await db.clear('records');
+                            await db.putAll('records', records);
+                            modal.remove();
+                            renderAll();
+                            showToast('Truck deleted');
+                        }
+                    };
+                });
+                modal.querySelector('#addTruckBtn').onclick = () => {
+                    modal.remove();
+                    showAddTruckModal();
+                };
+            }
+
+            function showAddTruckModal() {
+                const html = `
+                    <div class="settings-item">
+                        <label class="settings-label">Plate Number</label>
+                        <input type="text" id="newPlateNumber" class="settings-input" placeholder="e.g., GBH 218Z">
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">Monthly Budget (S$)</label>
+                        <input type="number" id="newBudget" class="settings-input" value="650" step="10" min="0">
+                    </div>
+                `;
+                const modal = createModal('➕ Add New Truck', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="addTruckConfirmBtn">Add Truck</button>
+                `);
+                modal.querySelector('#addTruckConfirmBtn').onclick = async () => {
+                    const plate = modal.querySelector('#newPlateNumber').value.trim();
+                    if (!plate) { showToast('Please enter plate number'); return; }
+                    const budget = parseFloat(modal.querySelector('#newBudget').value) || 650;
+                    trucks.push({ id: generateId(), plateNumber: plate, budget: budget, color: '#c2413a' });
+                    await saveTrucks();
+                    modal.remove();
+                    renderAll();
+                    showToast(`Truck "${plate}" added`);
+                };
+            }
+
+            function showTruckRecordsModal(truck) {
+                const currentMonth = getCurrentMonth();
+                const truckRecords = records.filter(r => r.truckId === truck.id && r.date.startsWith(currentMonth))
+                    .sort((a, b) => b.timestamp - a.timestamp);
+                const total = truckRecords.reduce((sum, r) => sum + r.amount, 0);
+                const remaining = truck.budget - total;
+
+                const html = `
+                    <div style="margin-bottom: 16px; padding: 14px; background: rgba(0,0,0,0.04); border-radius: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>${escapeHtml(truck.plateNumber)}</span>
+                            <span style="font-weight: 600;">S$${total.toFixed(2)} / S$${truck.budget}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${total > truck.budget ? 'over-budget' : ''}" style="width: ${Math.min((total / truck.budget) * 100, 100)}%"></div>
+                        </div>
+                        <div style="margin-top: 8px; color: ${remaining >= 0 ? 'var(--success-color)' : 'var(--warning-color)'};">
+                            ${remaining >= 0 ? `S$${remaining.toFixed(2)} remaining` : `⚠️ S$${Math.abs(remaining).toFixed(2)} over budget`}
+                        </div>
+                    </div>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        ${truckRecords.length === 0 ? '<div class="empty-state">No records this month</div>' : ''}
+                        ${truckRecords.map(r => `
+                            <div class="record-item-detail">
+                                <div class="record-header">
+                                    <span class="record-plate-large">S$${r.amount.toFixed(2)}</span>
+                                </div>
+                                <div class="record-datetime">${formatDateTime(r.timestamp)}</div>
+                                <div class="record-actions">
+                                    <span class="edit-record" data-id="${r.id}">✏️ Edit</span>
+                                    <span class="delete-record" data-id="${r.id}" style="color: var(--warning-color);">🗑 Delete</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+
+                const modal = createModal(`📊 ${truck.plateNumber} Records`, html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                `);
+                modal.querySelectorAll('.edit-record').forEach(btn => {
+                    btn.onclick = () => {
+                        const r = records.find(rec => rec.id === btn.dataset.id);
+                        if (r) { modal.remove(); showEditRecordModal(r); }
+                    };
+                });
+                modal.querySelectorAll('.delete-record').forEach(btn => {
+                    btn.onclick = async () => {
+                        if (confirm('Delete this record?')) {
+                            await deleteRecord(btn.dataset.id);
+                            modal.remove();
+                            renderAll();
+                            showToast('Record deleted');
+                        }
+                    };
+                });
+            }
+
+            function showEditRecordModal(record) {
+                const truck = trucks.find(t => t.id === record.truckId);
+                const html = `
+                    <div class="settings-item">
+                        <label class="settings-label">Truck</label>
+                        <div class="truck-select-trigger" style="cursor: default;">${escapeHtml(truck?.plateNumber || record.plateNumber)}</div>
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">Amount (S$)</label>
+                        <input type="number" id="editAmount" class="settings-input" value="${record.amount}" step="0.01" min="0">
+                    </div>
+                    <div class="settings-item">
+                        <label class="settings-label">Date & Time</label>
+                        <input type="datetime-local" id="editDateTime" class="settings-input" value="${new Date(record.timestamp).toISOString().slice(0, 16)}">
+                    </div>
+                `;
+                const modal = createModal('✏️ Edit Record', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="saveRecordBtn">Save</button>
+                `);
+                modal.querySelector('#saveRecordBtn').onclick = async () => {
+                    const newAmount = parseFloat(modal.querySelector('#editAmount').value);
+                    const newDateTime = new Date(modal.querySelector('#editDateTime').value);
+                    if (isNaN(newAmount) || newAmount <= 0) { showToast('Valid amount required'); return; }
+                    record.amount = newAmount;
+                    record.timestamp = newDateTime.getTime();
+                    record.date = formatDate(newDateTime);
+                    record.time = formatTime(newDateTime);
+                    await db.put('records', record);
+                    const index = records.findIndex(r => r.id === record.id);
+                    if (index !== -1) records[index] = record;
+                    modal.remove();
+                    renderAll();
+                    showToast('Record updated');
+                };
+            }
+
+            function showViewAllRecordsModal() {
+                const currentMonth = getCurrentMonth();
+                let selectedFilterTruck = 'all';
+                let selectedFilterMonth = currentMonth;
+
+                const renderFilteredRecords = () => {
+                    const container = document.getElementById('filteredRecordsContainer');
+                    let filtered = [...records];
+                    if (selectedFilterTruck !== 'all') filtered = filtered.filter(r => r.truckId === selectedFilterTruck);
+                    if (selectedFilterMonth !== 'all') filtered = filtered.filter(r => r.date.startsWith(selectedFilterMonth));
+                    filtered.sort((a, b) => b.timestamp - a.timestamp);
+                    const total = filtered.reduce((sum, r) => sum + r.amount, 0);
+                    const months = [...new Set(records.map(r => r.date.slice(0, 7)))].sort().reverse();
+
+                    let html = `
+                        <div class="filter-section">
+                            <label class="filter-label">Truck</label>
+                            <select id="filterTruck" class="settings-input">
+                                <option value="all" ${selectedFilterTruck === 'all' ? 'selected' : ''}>All Trucks</option>
+                                ${trucks.map(t => `<option value="${t.id}" ${selectedFilterTruck === t.id ? 'selected' : ''}>${escapeHtml(t.plateNumber)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="filter-section">
+                            <label class="filter-label">Month</label>
+                            <select id="filterMonth" class="settings-input">
+                                <option value="all" ${selectedFilterMonth === 'all' ? 'selected' : ''}>All Months</option>
+                                ${months.map(m => `<option value="${m}" ${selectedFilterMonth === m ? 'selected' : ''}>${m}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div style="padding: 12px; background: rgba(0,0,0,0.04); border-radius: 12px; margin-bottom: 16px;">
+                            <strong>Total: S$${total.toFixed(2)}</strong> (${filtered.length} records)
+                        </div>
+                        <div style="max-height: 350px; overflow-y: auto;">
+                    `;
+                    let currentDate = '';
+                    filtered.forEach(r => {
+                        const truck = trucks.find(t => t.id === r.truckId);
+                        if (r.date !== currentDate) {
+                            currentDate = r.date;
+                            html += `<div style="font-weight: 600; margin: 12px 0 8px; color: var(--text-secondary);">${currentDate}</div>`;
+                        }
+                        html += `
+                            <div class="record-item-detail">
+                                <div class="record-header">
+                                    <span class="record-plate-large">${escapeHtml(truck?.plateNumber || r.plateNumber)}</span>
+                                    <span class="record-amount-large">S$${r.amount.toFixed(2)}</span>
+                                </div>
+                                <div class="record-datetime">${r.time || formatTime(r.timestamp)}</div>
+                                <div class="record-actions">
+                                    <span class="edit-record" data-id="${r.id}">✏️</span>
+                                    <span class="delete-record" data-id="${r.id}" style="color: var(--warning-color);">🗑</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                    container.innerHTML = html;
+
+                    container.querySelector('#filterTruck').onchange = (e) => { selectedFilterTruck = e.target.value; renderFilteredRecords(); };
+                    container.querySelector('#filterMonth').onchange = (e) => { selectedFilterMonth = e.target.value; renderFilteredRecords(); };
+                    container.querySelectorAll('.edit-record').forEach(btn => {
+                        btn.onclick = () => {
+                            const r = records.find(rec => rec.id === btn.dataset.id);
+                            if (r) { modal.remove(); showEditRecordModal(r); }
+                        };
+                    });
+                    container.querySelectorAll('.delete-record').forEach(btn => {
+                        btn.onclick = async () => {
+                            if (confirm('Delete this record?')) {
+                                await deleteRecord(btn.dataset.id);
+                                renderFilteredRecords();
+                                renderAll();
+                                showToast('Record deleted');
+                            }
+                        };
+                    });
+                };
+
+                const html = `<div id="filteredRecordsContainer"></div>`;
+                const modal = createModal('📊 All Records', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                `);
+                renderFilteredRecords();
+            }
+
+            function showExportNoteModal() {
+                const currentMonth = getCurrentMonth();
+                const monthRecords = records.filter(r => r.date.startsWith(currentMonth))
+                    .sort((a, b) => a.truckId.localeCompare(b.truckId) || b.timestamp - a.timestamp);
+
+                let note = `Diesel Records - ${currentMonth}\n${'='.repeat(30)}\n\n`;
+                const grouped = {};
+                monthRecords.forEach(r => {
+                    const plate = trucks.find(t => t.id === r.truckId)?.plateNumber || r.plateNumber;
+                    if (!grouped[plate]) grouped[plate] = [];
+                    grouped[plate].push(r);
+                });
+                let grandTotal = 0;
+                for (const plate in grouped) {
+                    const recs = grouped[plate];
+                    const total = recs.reduce((s, r) => s + r.amount, 0);
+                    grandTotal += total;
+                    note += `${plate}: S$${total.toFixed(2)} (${recs.length} fill-ups)\n`;
+                    recs.forEach(r => note += `  ${r.date} ${r.time || ''} - S$${r.amount.toFixed(2)}\n`);
+                    note += '\n';
+                }
+                note += `${'='.repeat(30)}\nTOTAL: S$${grandTotal.toFixed(2)}`;
+
+                const html = `
+                    <textarea id="noteTextArea" style="width: 100%; height: 300px; padding: 14px; border-radius: 16px; border: 1px solid var(--border-light); background: var(--card-bg); color: var(--text-primary); font-family: monospace; font-size: 13px;" readonly>${escapeHtml(note)}</textarea>
+                `;
+                const modal = createModal('📄 Export Note', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                    <button class="btn btn-primary" id="copyNoteBtn">📋 Copy</button>
+                `);
+                modal.querySelector('#copyNoteBtn').onclick = async () => {
+                    try {
+                        await navigator.clipboard.writeText(note);
+                        showToast('✅ Copied to clipboard');
+                    } catch {
+                        const textarea = modal.querySelector('#noteTextArea');
+                        textarea.select();
+                        document.execCommand('copy');
+                        showToast('✅ Copied to clipboard');
+                    }
+                };
+            }
+
+            function showExportBackupModal() {
+                const data = {
+                    meta: { version: '1.0', exportDate: new Date().toISOString(), totalRecords: records.length },
+                    trucks,
+                    records
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `diesel-backup-${formatDate(new Date())}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                showToast(`✅ Exported ${records.length} records`);
+            }
+
+            function showImportBackupModal() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    try {
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        if (!data.records) throw new Error('Invalid backup');
+
+                        const html = `
+                            <div style="padding: 12px; background: rgba(0,0,0,0.04); border-radius: 12px; margin-bottom: 16px;">
+                                <div><strong>File:</strong> ${escapeHtml(file.name)}</div>
+                                <div><strong>Records:</strong> ${data.records.length}</div>
+                                <div><strong>Trucks:</strong> ${data.trucks?.length || 0}</div>
+                            </div>
+                            <div class="settings-item">
+                                <label class="settings-label">Import Mode</label>
+                                <select id="importMode" class="settings-input">
+                                    <option value="merge">🔄 Merge (keep existing, add new)</option>
+                                    <option value="replace">⚠️ Replace (delete all current data)</option>
+                                </select>
+                            </div>
+                        `;
+                        const modal = createModal('📥 Import Backup', html, `
+                            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                            <button class="btn btn-primary" id="confirmImportBtn">Import</button>
+                        `);
+                        modal.querySelector('#confirmImportBtn').onclick = async () => {
+                            const mode = modal.querySelector('#importMode').value;
+                            if (mode === 'replace') {
+                                trucks = data.trucks || [...DEFAULT_TRUCKS];
+                                records = data.records;
+                                await saveTrucks();
+                                await db.clear('records');
+                                await db.putAll('records', records);
+                            } else {
+                                data.trucks?.forEach(rt => {
+                                    if (!trucks.find(t => t.id === rt.id)) trucks.push(rt);
+                                });
+                                await saveTrucks();
+                                const newRecords = data.records.filter(r => !records.some(ex => ex.id === r.id));
+                                await db.putAll('records', newRecords);
+                                records.push(...newRecords);
+                            }
+                            modal.remove();
+                            renderAll();
+                            showToast(`✅ Imported ${data.records.length} records`);
+                        };
+                    } catch (err) {
+                        showToast('❌ Invalid backup file');
+                    }
+                };
+                input.click();
+            }
+
+            async function showClearDataModal() {
+                const html = `
+                    <div style="text-align: center; padding: 16px 0;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                        <div style="font-weight: 600; font-size: 18px; margin-bottom: 12px; color: var(--warning-color);">Clear All Data?</div>
+                        <div style="color: var(--text-secondary); margin-bottom: 20px;">This will permanently delete all trucks and records.</div>
+                        <input type="text" id="confirmInput" class="settings-input" placeholder="Type DELETE to confirm" style="text-align: center; text-transform: uppercase;">
+                    </div>
+                `;
+                const modal = createModal('🗑 Clear All Data', html, `
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="confirmClearBtn" style="background: var(--warning-color);" disabled>Clear All</button>
+                `);
+                const input = modal.querySelector('#confirmInput');
+                const btn = modal.querySelector('#confirmClearBtn');
+                input.oninput = () => { btn.disabled = input.value !== 'DELETE'; };
+                btn.onclick = async () => {
+                    if (input.value !== 'DELETE') return;
+                    trucks = [...DEFAULT_TRUCKS];
+                    records = [];
+                    selectedTruckId = null;
+                    await saveTrucks();
+                    await db.clear('records');
+                    modal.remove();
+                    renderAll();
+                    showToast('All data cleared');
+                };
+            }
+
+            async function handleRecordDiesel() {
+                const amountInput = document.getElementById('amountInput');
+                const amount = parseFloat(amountInput.value);
+                if (!selectedTruckId) { 
+                    showToast('Select a Vehicle first'); 
+                    return; 
+                }
+                if (isNaN(amount) || amount <= 0) { 
+                    showToast('Valid amount required'); 
+                    return; 
+                }
+                const truck = trucks.find(t => t.id === selectedTruckId);
+                const stats = getTruckMonthStats(selectedTruckId);
+                if (stats.total + amount > truck.budget) {
+                    if (!confirm(`⚠️ Exceeds budget by S$${((stats.total + amount) - truck.budget).toFixed(2)}. Continue?`)) return;
+                }
+                const now = new Date();
+                const record = {
+                    id: generateId(),
+                    truckId: selectedTruckId,
+                    plateNumber: truck.plateNumber,
+                    date: formatDate(now),
+                    time: formatTime(now),
+                    amount: amount,
+                    timestamp: now.getTime(),
+                    recordedBy: settings.userName
+                };
+                await saveRecord(record);
+                amountInput.value = '';
+                renderAll();
+                
+                if (githubConfig.enabled && isOnline) {
+                    showToast(`✅ Recorded S$${amount.toFixed(2)}. Syncing...`);
+                    await syncWithGitHub();
+                } else {
+                    showToast(`✅ Recorded S$${amount.toFixed(2)} for ${truck.plateNumber}`);
+                }
+            }
+
+            // ==================== Initialize ====================
+            async function init() {
+                await loadData();
+                renderAll();
+                updateConnectionStatus();
+
+                // Event Listeners
+                document.getElementById('recordBtn').addEventListener('click', handleRecordDiesel);
+                document.getElementById('amountInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleRecordDiesel(); });
+                document.getElementById('amountInput').addEventListener('input', function() {
+                    let val = this.value.replace(/[^\d.]/g, '');
+                    const parts = val.split('.');
+                    if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                    if (parts[1]?.length > 2) val = parts[0] + '.' + parts[1].slice(0, 2);
+                    this.value = val;
+                });
+
+                document.getElementById('truckSelectTrigger').addEventListener('click', () => {
+                    document.getElementById('truckDropdown').classList.toggle('show');
+                });
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.truck-selector')) document.getElementById('truckDropdown').classList.remove('show');
+                });
+
+                document.getElementById('menuBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.toggle('show');
+                });
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.menu-container')) document.getElementById('menuDropdown').classList.remove('show');
+                });
+
+                document.getElementById('installGuideBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showInstallGuideModal();
+                });
+
+                document.getElementById('installApkBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    window.location.href = 'https://company-record.github.io/diesel-record/Diesel_Record.apk';
+                    showToast('📲 Downloading APK...');
+                });
+
+                document.getElementById('githubSyncBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showGitHubConfigModal();
+                });
+                document.getElementById('exportNoteBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showExportNoteModal();
+                });
+                document.getElementById('manageTrucksBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showManageTrucksModal();
+                });
+                document.getElementById('viewAllRecordsBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showViewAllRecordsModal();
+                });
+                document.getElementById('viewAllBtn').addEventListener('click', () => showViewAllRecordsModal());
+                document.getElementById('exportBackupBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showExportBackupModal();
+                });
+                document.getElementById('importBackupBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showImportBackupModal();
+                });
+                document.getElementById('clearDataBtn').addEventListener('click', () => {
+                    document.getElementById('menuDropdown').classList.remove('show');
+                    showClearDataModal();
+                });
+                document.getElementById('syncIndicator').addEventListener('click', () => {
+                    if (githubConfig.enabled) syncWithGitHub();
+                    else showGitHubConfigModal();
+                });
+
+                // Connection status
+                window.addEventListener('online', () => { isOnline = true; updateConnectionStatus(); showToast('📶 Back online'); });
+                window.addEventListener('offline', () => { isOnline = false; updateConnectionStatus(); showToast('📴 Offline mode'); });
+
+                // Auto-sync
+                if (githubConfig.enabled && isOnline) {
+                    setTimeout(() => syncWithGitHub(), 1000);
+                }
+            }
+
+            init();
+        })();
+    </script>
+</body>
+
+</html>
