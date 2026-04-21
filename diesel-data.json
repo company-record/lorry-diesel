@@ -25,10 +25,20 @@
       "color": "#f59e0b"
     }
   ],
-  "records": [],
+  "records": [
+    {
+      "id": "1776776926522-p06gg9dqj",
+      "truckId": "truck_001",
+      "plateNumber": "GBH 218Z",
+      "date": "2026-04-21",
+      "time": "21:08",
+      "amount": 100,
+      "timestamp": 1776776926522
+    }
+  ],
   "meta": {
     "version": "1.0",
-    "lastUpdated": "2026-04-21T13:08:39.146Z",
-    "totalRecords": 0
+    "lastUpdated": "2026-04-21T13:08:46.926Z",
+    "totalRecords": 1
   }
 }
