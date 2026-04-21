@@ -1,46 +1,4 @@
 {
-  "trucks": [
-    {
-      "id": "truck_001",
-      "plateNumber": "GBH 218Z",
-      "budget": 650,
-      "color": "#c2413a"
-    },
-    {
-      "id": "truck_002",
-      "plateNumber": "YR 1868R",
-      "budget": 650,
-      "color": "#3b82f6"
-    },
-    {
-      "id": "truck_003",
-      "plateNumber": "YR 1859S",
-      "budget": 650,
-      "color": "#10b981"
-    },
-    {
-      "id": "truck_004",
-      "plateNumber": "YR 2284T",
-      "budget": 650,
-      "color": "#f59e0b"
-    }
-  ],
-  "records": [
-    {
-      "id": "1776770736866-viyayfty7",
-      "truckId": "truck_001",
-      "plateNumber": "GBH 218Z",
-      "date": "2026-04-21",
-      "time": "19:25",
-      "amount": 25,
-      "timestamp": 1776770736866,
-      "recordedBy": "Seng"
-    }
-  ],
-  "meta": {
-    "version": "1.0",
-    "lastUpdated": "2026-04-21T11:27:48.384Z",
-    "lastUpdatedBy": "Seng",
-    "totalRecords": 1
-  }
+  "trucks": [], 
+  "records": []
 }
