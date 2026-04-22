@@ -25,19 +25,7 @@
       "color": "#f59e0b"
     }
   ],
-  "records": [
-    {
-      "id": "1776813501947-pe8v2wr6y",
-      "truckId": "truck_001",
-      "plateNumber": "GBH 218 Z",
-      "date": "2026-04-22",
-      "time": "07:18",
-      "amount": 100,
-      "timestamp": 1776813501947,
-      "updatedAt": 1776813520601,
-      "deleted": true
-    }
-  ],
+  "records": [],
   "meta": {
     "version": "2.0",
     "lastUpdated": "2026-04-22T00:37:19.002Z",
