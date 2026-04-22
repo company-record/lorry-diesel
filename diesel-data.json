@@ -27,6 +27,17 @@
   ],
   "records": [
     {
+      "id": "1776832401312-ja01z5k8h",
+      "truckId": "truck_001",
+      "plateNumber": "GBH 218 Z",
+      "date": "2026-04-22",
+      "time": "12:33",
+      "amount": 630,
+      "timestamp": 1776832401312,
+      "updatedAt": 1776832401312,
+      "deleted": false
+    },
+    {
       "id": "1776816135258-x6mgem2vl",
       "truckId": "truck_003",
       "plateNumber": "YR 1859S",
@@ -62,8 +73,8 @@
   ],
   "meta": {
     "version": "2.0",
-    "lastUpdated": "2026-04-22T04:33:18.276Z",
-    "totalRecords": 0,
-    "totalRecordsWithDeleted": 3
+    "lastUpdated": "2026-04-22T04:33:21.863Z",
+    "totalRecords": 1,
+    "totalRecordsWithDeleted": 4
   }
 }
