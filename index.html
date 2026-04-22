@@ -925,10 +925,10 @@
             };
 
             const DEFAULT_TRUCKS = [
-                { id: 'truck_001', plateNumber: 'GBH 218Z', budget: 650, color: '#c2413a' },
-                { id: 'truck_002', plateNumber: 'YR 1868R', budget: 650, color: '#3b82f6' },
-                { id: 'truck_003', plateNumber: 'YR 1859S', budget: 650, color: '#10b981' },
-                { id: 'truck_004', plateNumber: 'YR 2284T', budget: 650, color: '#f59e0b' }
+                { id: 'truck_001', plateNumber: 'GBH 218Z', budget: 800, color: '#c2413a' },
+                { id: 'truck_002', plateNumber: 'YR 1868R', budget: 800, color: '#3b82f6' },
+                { id: 'truck_003', plateNumber: 'YR 1859S', budget: 800, color: '#10b981' },
+                { id: 'truck_004', plateNumber: 'YR 2284T', budget: 800, color: '#f59e0b' }
             ];
 
             // ==================== State ====================
@@ -1223,7 +1223,7 @@
                 const stats = getAllTruckStats();
 
                 grid.innerHTML = stats.map(({ truck, total }) => {
-                    const budget = truck.budget || 650;
+                    const budget = truck.budget || 800;
                     const percentage = Math.min((total / budget) * 100, 100);
                     const remaining = budget - total;
                     const isOverBudget = total > budget;
@@ -1838,7 +1838,7 @@
                     </div>
                     <div class="settings-item">
                         <label class="settings-label">Monthly Budget (S$)</label>
-                        <input type="number" id="newBudget" class="settings-input" value="650" step="10" min="0">
+                        <input type="number" id="newBudget" class="settings-input" value="800" step="10" min="0">
                     </div>
                 `;
                 const modal = createModal('➕ Add New Truck', html, `
@@ -1848,7 +1848,7 @@
                 modal.querySelector('#addTruckConfirmBtn').onclick = async () => {
                     const plate = modal.querySelector('#newPlateNumber').value.trim();
                     if (!plate) { showToast('Please enter plate number'); return; }
-                    const budget = parseFloat(modal.querySelector('#newBudget').value) || 650;
+                    const budget = parseFloat(modal.querySelector('#newBudget').value) || 800;
                     trucks.push({ id: generateId(), plateNumber: plate, budget: budget, color: '#c2413a' });
                     await saveTrucks();
                     modal.remove();
