@@ -35,7 +35,7 @@
       "amount": 800,
       "timestamp": 1777002164975,
       "updatedAt": 1777002164976,
-      "deleted": false
+      "deleted": true
     },
     {
       "id": "1776922280095-9jjur5mx0",
@@ -46,7 +46,7 @@
       "amount": 170,
       "timestamp": 1776922280094,
       "updatedAt": 1776922280095,
-      "deleted": false
+      "deleted": true
     },
     {
       "id": "1776832401312-ja01z5k8h",
@@ -57,7 +57,7 @@
       "amount": 630,
       "timestamp": 1776832401312,
       "updatedAt": 1776832401312,
-      "deleted": false
+      "deleted": true
     },
     {
       "id": "1776816135258-x6mgem2vl",
